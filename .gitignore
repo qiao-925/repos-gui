@@ -1,0 +1,25 @@
+# 忽略所有目录（克隆的仓库）
+/*/
+
+# 但保留管理仓库相关的目录和文件
+!scripts/
+!workspaces/
+!docs/
+!.gitignore
+!README.md
+!*.sh
+!*.json
+!*.md
+!*.yml
+!*.yaml
+
+# 忽略系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# 忽略日志文件
+*.log
+
