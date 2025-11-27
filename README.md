@@ -48,6 +48,31 @@ bash sync-groups.sh --list
 
 **文件夹组织**：每个分组会自动创建对应的文件夹（使用代号作为文件夹名，如 `597.9`、`54号`），该分组下的所有仓库会同步到对应的文件夹中，实现清晰的组织结构。
 
+**单个仓库深克隆**
+
+脚本默认使用浅克隆（`--depth 1`）以节省时间和空间。如果需要对单个仓库进行深克隆（获取完整历史），可以使用以下方法：
+
+```bash
+# 方法 1：将现有浅克隆转换为深克隆（推荐）
+cd <分组文件夹>/<仓库名>
+git fetch --unshallow
+git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+git fetch origin
+
+# 方法 2：删除后重新深克隆
+rm -rf <分组文件夹>/<仓库名>
+git clone https://github.com/<用户名>/<仓库名>.git <分组文件夹>/<仓库名>
+```
+
+**示例**：
+```bash
+# 将 60 分组下的 Assemble 仓库转换为深克隆
+cd 60/Assemble
+git fetch --unshallow
+git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+git fetch origin
+```
+
 ### 步骤 2：打开分组文件夹作为 Workspace
 
 同步完成后，每个分组都有自己的文件夹，可以直接打开文件夹作为 workspace：
