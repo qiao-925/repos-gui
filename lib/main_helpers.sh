@@ -3,12 +3,6 @@
 
 # 解析命令行参数
 parse_arguments() {
-    # 如果是 --list，直接列出分组并退出
-    if [ $# -eq 0 ] || [ "$1" = "--list" ] || [ "$1" = "-l" ]; then
-        list_groups
-        exit 0
-    fi
-    
     local args=("$@")
     
     # 处理 -a 或 --all 参数：同步所有分组
@@ -96,8 +90,13 @@ sync_group_repos_main() {
     group_folders["$group_folder"]=1
     group_names["$group_folder"]="$group_name"
     
-    # 计算总数
-    local total_count=$(echo "$group_repos" | grep -v '^$' | wc -l | tr -d ' ')
+    # 将仓库列表转换为数组，便于计算总数和遍历
+    local repos_array=()
+    while IFS= read -r repo_name; do
+        [ -n "$repo_name" ] && repos_array+=("$repo_name")
+    done <<< "$group_repos"
+    
+    local total_count=${#repos_array[@]}
     local current_index=0
     
     # 记录失败的仓库（用于第二层重试）
@@ -107,9 +106,8 @@ sync_group_repos_main() {
     print_info "分组文件夹: $group_folder"
     echo ""
     
-    while IFS= read -r repo_name; do
-        # 去除首尾空白字符
-        repo_name=$(echo "$repo_name" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+    # 遍历数组而不是重新读取字符串
+    for repo_name in "${repos_array[@]}"; do
         
         if [ -z "$repo_name" ]; then
             continue
@@ -117,12 +115,21 @@ sync_group_repos_main() {
         
         ((current_index++))
         
+        echo ""
+        print_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        print_info "处理仓库 [$current_index/$total_count]: $repo_name"
+        print_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        
         # 查找仓库完整名称
-        print_debug "  查找仓库: $repo_name"
+        print_operation_start "查找仓库完整名称" "$repo_name"
+        local start_time=$(date +%s)
         local repo_full=$(find_repo_full_name "$repo_name")
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
         
         if [ -z "$repo_full" ]; then
-            echo "[$current_index/$total_count] [错误] $repo_name - 远程仓库不存在"
+            print_operation_end "查找仓库完整名称" "fail" "$duration" "未找到远程仓库"
+            echo "[$current_index/$total_count] [错误] $repo_name - 远程仓库不存在" >&2
             print_error "    未找到远程仓库: $repo_name"
             print_error "    可能原因: 仓库已被删除、仓库名错误、或没有访问权限"
             record_error "$error_log_ref" "$repo_name" "错误" "远程仓库不存在"
@@ -130,12 +137,25 @@ sync_group_repos_main() {
             continue
         fi
         
+        print_operation_end "查找仓库完整名称" "success" "$duration" "$repo_full"
         print_info "    找到远程仓库: $repo_full"
         
         # 同步单个仓库
+        print_operation_start "同步仓库" "$repo_full -> $group_folder/$repo_name"
+        local sync_start_time=$(date +%s)
         local result
         sync_single_repo "$repo_full" "$repo_name" "$group_folder" "$current_index" "$total_count" "$error_log_ref"
         result=$?
+        local sync_end_time=$(date +%s)
+        local sync_duration=$((sync_end_time - sync_start_time))
+        
+        if [ $result -eq 0 ]; then
+            print_operation_end "同步仓库" "success" "$sync_duration" "$repo_name"
+        elif [ $result -eq 2 ]; then
+            print_operation_end "同步仓库" "skip" "$sync_duration" "$repo_name (已跳过)"
+        else
+            print_operation_end "同步仓库" "fail" "$sync_duration" "$repo_name"
+        fi
         
         # 更新统计信息
         local repo_path="$group_folder/$repo_name"
@@ -145,7 +165,7 @@ sync_group_repos_main() {
         if [ $result -ne 0 ] && [ $result -ne 2 ]; then
             failed_repos+=("$repo_full|$repo_name")
         fi
-    done <<< "$group_repos"
+    done
     
     # 返回失败的仓库列表（用于第二层重试）
     printf '%s\n' "${failed_repos[@]}"
@@ -244,25 +264,44 @@ execute_sync() {
     # 遍历每个分组
     for input_group in "${groups[@]}"; do
         print_info "处理分组输入: '$input_group'"
+        print_operation_start "查找分组" "输入: $input_group"
+        local start_time=$(date +%s)
         local group_name=$(find_group_name "$input_group")
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
         
         if [ -z "$group_name" ]; then
+            print_operation_end "查找分组" "fail" "$duration" "未找到分组: $input_group"
             print_error "未找到分组: $input_group"
             print_info "使用 --list 查看所有可用分组和代号"
             print_warning "跳过该分组，继续处理其他分组..."
             continue
         fi
         
+        print_operation_end "查找分组" "success" "$duration" "找到: $group_name"
         print_success "找到分组: '$group_name'"
-        local group_folder=$(get_group_folder "$group_name")
-        print_debug "分组文件夹: '$group_folder'"
         
+        print_operation_start "获取分组文件夹" "$group_name"
+        local start_time=$(date +%s)
+        local group_folder=$(get_group_folder "$group_name")
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        print_operation_end "获取分组文件夹" "success" "$duration" "$group_folder"
+        
+        print_operation_start "获取分组仓库列表" "$group_name"
+        local start_time=$(date +%s)
         local group_repos=$(get_group_repos "$group_name")
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
         
         if [ -z "$group_repos" ]; then
+            print_operation_end "获取分组仓库列表" "fail" "$duration" "分组中没有仓库"
             print_warning "分组 $group_name 中没有仓库"
             continue
         fi
+        
+        local repo_count=$(echo "$group_repos" | grep -c . || echo 0)
+        print_operation_end "获取分组仓库列表" "success" "$duration" "共 $repo_count 个仓库"
         
         echo ""
         print_info "将同步分组: $group_name"

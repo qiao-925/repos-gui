@@ -1,32 +1,31 @@
 #!/bin/bash
 # GitHub 仓库按分组同步脚本
-# 功能：按分组同步 GitHub 仓库，保持本地仓库与远程仓库完全同步（增删改查）
-# 使用方法: 
-#   bash sync-groups-v2.sh <分组名1> [分组名2] ...
-#   分组名可以是完整名称（如"Go 学习"）或代号（如"597.9"或"597.9高地"）
-#   使用 --list 或 -l 查看所有可用分组
-#   使用 -a 或 --all 同步所有分组
-#
-# 加速配置：
-#   Git 缓冲区：自动配置 500MB HTTP 缓冲区
 
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-# 加载所有模块
+# 加载基础模块（所有情况都需要）
 source "$LIB_DIR/config.sh"
 source "$LIB_DIR/logger.sh"
 source "$LIB_DIR/parser.sh"
-source "$LIB_DIR/github.sh"
-source "$LIB_DIR/sync.sh"
-source "$LIB_DIR/cleanup.sh"
-source "$LIB_DIR/stats.sh"
-source "$LIB_DIR/retry.sh"
-source "$LIB_DIR/main_helpers.sh"
 
 # 主函数
 main() {
+    # 0. 特殊参数处理：--list 或 -l 直接列出分组并退出（只加载必要模块）
+    if [ $# -eq 0 ] || [ "$1" = "--list" ] || [ "$1" = "-l" ]; then
+        list_groups
+        exit 0
+    fi
+    
+    # 加载其他模块（同步操作需要）
+    source "$LIB_DIR/github.sh"
+    source "$LIB_DIR/sync.sh"
+    source "$LIB_DIR/cleanup.sh"
+    source "$LIB_DIR/stats.sh"
+    source "$LIB_DIR/retry.sh"
+    source "$LIB_DIR/main_helpers.sh"
+    
     # 1. 参数解析
     local parsed_args_output=$(parse_arguments "$@")
     local parsed_exit_code=$?

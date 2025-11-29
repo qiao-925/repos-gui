@@ -10,7 +10,7 @@ cleanup_deleted_repos() {
     local delete_count=0
     
     # 获取仓库所有者（用于检查远程仓库是否存在）
-    local repo_owner=$(gh api user --jq '.login' 2>/dev/null || echo "")
+    local repo_owner=$(get_github_username)
     if [ -n "$repo_owner" ]; then
         print_info "仓库所有者: $repo_owner"
     else
