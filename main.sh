@@ -1,5 +1,5 @@
 #!/bin/bash
-# GitHub 仓库批量克隆脚本：极简设计，专注于核心功能
+# gh-repos-batch-clone：极简设计，专注于核心功能
 #
 # 主要功能：
 #   - 解析命令行参数（-t 并行任务数，-c 并行传输数）
@@ -86,7 +86,7 @@ parse_args() {
 # 显示帮助信息
 show_help() {
     cat << EOF
-GitHub 仓库批量克隆脚本
+gh-repos-batch-clone
 
 用法: $0 [选项]
 
@@ -387,7 +387,7 @@ print_summary() {
 
 # 主函数
 main() {
-    log_info "GitHub 仓库批量克隆脚本启动"
+    log_info "gh-repos-batch-clone 启动"
     
     # 解析命令行参数
     parse_args "$@"

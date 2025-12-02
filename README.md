@@ -2,7 +2,48 @@
 
 **批量克隆 GitHub 仓库**，采用**双重并行加速**技术（应用层多仓库并发 + Git 层多连接传输），大幅提升克隆速度。结合独特的**军事高地编号体系**，实现仓库的智能分类与高效管理。
 
+**支持两种实现版本**：
+- **Python 版本**（推荐）：`main.py` - 代码更清晰，易于维护
+- **Bash 版本**：`main.sh` - 无需额外依赖，直接运行
+
 ## 一、🚀 快速开始
+
+### Python 版本（推荐）
+
+1. **安装 Python**（需要 Python 3.7+）：
+   ```bash
+   # 检查 Python 版本
+   python --version
+   ```
+
+2. **安装依赖**（可选，用于 Windows 颜色支持）：
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **创建分类文档**（使用 AI 辅助）：
+   - 打开 `GitHub 仓库分类 Prompt.md`
+   - 在 Cursor 中执行：`@GitHub 仓库分类 Prompt.md 执行当前prompt`
+   - 确认后保存为 `REPO-GROUPS.md`
+
+4. **开始克隆**：
+   ```bash
+   # 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
+   # 克隆完成后会自动检查仓库完整性
+   python main.py
+   
+   # 如果有失败的仓库，会自动生成 failed-repos.txt
+   # 可以重新执行失败的仓库
+   python main.py -f failed-repos.txt
+   
+   # 只检查已存在的仓库，不执行克隆
+   python main.py --check-only
+   
+   # 检查失败列表中的仓库
+   python main.py -f failed-repos.txt --check-only
+   ```
+
+### Bash 版本
 
 1. **安装 GitHub CLI**（如果未安装）：
    ```bash
@@ -59,6 +100,9 @@
 ### 📝 任务列表文件支持
 **灵活控制**：支持从文件读取任务列表，可以执行全量仓库、失败列表或自定义列表。脚本不关心输入来源，只负责执行任务列表，保持纯粹性。
 
+### ✅ 仓库完整性检查
+**质量保证**：克隆完成后自动使用 `git fsck` 检查仓库完整性，确保克隆的仓库可用。支持单独检查模式，可以随时验证已存在的仓库。
+
 ## 三、⚙️ 自定义参数
 
 ### 并发参数配置
@@ -68,6 +112,7 @@
 - **`-t, --tasks NUM`**：并行任务数（同时克隆的仓库数量，默认: 5）
 - **`-c, --connections NUM`**：并行传输数（每个仓库的 Git 连接数，默认: 8）
 - **`-f, --file FILE`**：指定任务列表文件（如果不指定，默认从 REPO-GROUPS.md 解析）
+- **`--check-only`**：只检查已存在的仓库，不执行克隆
 
 #### 推荐配置
 
@@ -80,6 +125,31 @@
 
 #### 使用示例
 
+**Python 版本**：
+```bash
+# 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
+python main.py
+
+# 自定义并行参数
+python main.py -t 10 -c 16
+
+# 从失败列表重新执行失败的仓库
+python main.py -f failed-repos.txt
+
+# 从自定义列表文件执行
+python main.py -f custom-list.txt -t 10 -c 16
+
+# 只检查已存在的仓库，不执行克隆
+python main.py --check-only
+
+# 检查失败列表中的仓库
+python main.py -f failed-repos.txt --check-only
+
+# 查看帮助信息
+python main.py --help
+```
+
+**Bash 版本**：
 ```bash
 # 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
 bash main.sh
@@ -130,11 +200,12 @@ bash main.sh --help
 
 1. **重新执行失败的仓库**：
    ```bash
-   # 第一次执行
-   bash main.sh -t 10 -c 16
+   # Python 版本
+   python main.py -t 10 -c 16
+   python main.py -f failed-repos.txt -t 10 -c 16
    
-   # 如果有失败的，会自动生成 failed-repos.txt
-   # 重新执行失败的仓库
+   # Bash 版本
+   bash main.sh -t 10 -c 16
    bash main.sh -f failed-repos.txt -t 10 -c 16
    ```
 
@@ -142,7 +213,11 @@ bash main.sh --help
    ```bash
    # 创建自定义列表文件 custom-list.md（REPO-GROUPS.md 格式）
    # 编辑文件，添加要克隆的仓库分组
-   # 执行自定义列表
+   
+   # Python 版本
+   python main.py -f custom-list.md
+   
+   # Bash 版本
    bash main.sh -f custom-list.md
    ```
 
@@ -150,11 +225,81 @@ bash main.sh --help
    ```bash
    # 可以将大量仓库分成多个列表文件
    # 分别执行，避免一次性执行太多
+   
+   # Python 版本
+   python main.py -f list-1.txt
+   python main.py -f list-2.txt
+   
+   # Bash 版本
    bash main.sh -f list-1.txt
    bash main.sh -f list-2.txt
    ```
 
-## 四、📐 架构设计
+## 四、✅ 仓库完整性检查
+
+### 功能说明
+
+脚本提供仓库完整性检查功能，使用 `git fsck` 验证克隆后的仓库是否可用。确保仓库对象完整、引用有效，及时发现损坏的仓库。
+
+### 检查原理
+
+**`git fsck`（File System Check）** 是 Git 的完整性检查工具：
+
+1. **SHA-1 哈希校验**：验证每个 Git 对象（commit、tree、blob、tag）的 SHA-1 哈希值，确保对象内容完整
+2. **对象连接性检查**：验证对象之间的引用关系，检查是否有缺失或损坏的对象
+3. **引用完整性**：检查分支、标签等引用是否指向有效对象
+
+### 检查时机
+
+脚本提供两种检查模式：
+
+1. **自动检查**（方案2）：克隆完成后，自动检查所有成功克隆的仓库
+   - 默认启用，无需额外参数
+   - 并行检查，不影响克隆速度
+   - 检查失败的仓库会被标记为失败，加入失败列表
+
+2. **单独检查**（方案3）：使用 `--check-only` 参数，只检查已存在的仓库
+   - 不执行克隆，只检查
+   - 可以随时验证已存在的仓库
+   - 适合定期检查或修复后验证
+
+### 使用方式
+
+#### 自动检查（默认）
+
+```bash
+# 正常克隆，克隆完成后自动检查
+python main.py
+
+# 克隆完成后，会自动检查所有成功克隆的仓库
+# 检查失败的仓库会被标记为失败，加入失败列表
+```
+
+#### 单独检查模式
+
+```bash
+# 只检查已存在的仓库，不执行克隆
+python main.py --check-only
+
+# 检查失败列表中的仓库
+python main.py -f failed-repos.txt --check-only
+
+# 检查所有仓库（从配置文件读取）
+python main.py --check-only -t 10
+```
+
+### 检查结果
+
+- **检查通过**：仓库完整性正常，可以正常使用
+- **检查失败**：仓库可能损坏，会被加入失败列表，可以重新克隆
+
+### 注意事项
+
+- `git fsck` 会忽略 `dangling objects` 警告（这是正常的，不算错误）
+- 检查超时时间默认为 30 秒，大仓库可能需要更长时间
+- 检查失败的仓库会被标记为失败，建议重新克隆
+
+## 五、📐 架构设计
 
 ### 核心设计原则
 
@@ -196,7 +341,15 @@ bash main.sh --help
   ├─→ [5] 记录失败列表
   │     └─ 将失败的仓库保存到 failed-repos.txt
   │
-  └─→ [6] 输出最终统计
+  ├─→ [5] 检查仓库完整性（克隆成功后）
+  │     └─ check_repos_parallel() [lib/check.py]
+  │         ├─ 并行检查所有成功克隆的仓库
+  │         └─ 使用 git fsck --strict 验证完整性
+  │
+  ├─→ [6] 记录失败列表
+  │     └─ 将克隆失败和检查失败的仓库保存到 failed-repos.txt
+  │
+  └─→ [7] 输出最终统计
         └─ print_summary()
             ├─ 显示成功/失败统计
             └─ 显示耗时统计
@@ -204,6 +357,21 @@ bash main.sh --help
 
 ### 模块化架构
 
+**Python 版本**：
+```
+main.py (主入口)
+  │
+  ├── lib/logger.py (日志输出)
+  ├── lib/config.py (配置解析)
+  ├── lib/clone.py (仓库克隆)
+  ├── lib/parallel.py (并行控制)
+  ├── lib/failed_repos.py (失败列表生成)
+  ├── lib/args.py (参数解析)
+  ├── lib/paths.py (路径处理)
+  └── lib/check.py (仓库完整性检查)
+```
+
+**Bash 版本**：
 ```
 main.sh (主入口)
   │
@@ -214,23 +382,38 @@ main.sh (主入口)
 
 **模块依赖关系**: logger → config/clone → main
 
-**文件结构**: `main.sh` + `lib/*.sh` (3 个模块)
-
 **核心函数**:
 - `parse_repo_groups()`: 解析配置文件，提取分组和仓库信息
 - `clone_repo()`: 克隆单个仓库，使用 Git 并行传输参数
 - `execute_parallel_clone()`: 并行执行克隆任务
+- `check_repo()`: 检查单个仓库的完整性（git fsck）
+- `check_repos_parallel()`: 并行检查多个仓库
 - `print_summary()`: 输出最终统计报告
 
 ### 代码统计
 
-#### 主要代码文件列表
+#### Python 版本文件列表
 
 | 文件 | 行数 | 功能说明 |
 |------|------|----------|
-| `main.sh` | ~200 | **主入口**：解析命令行参数、协调各模块执行、并行任务管理 |
-| `lib/config.sh` | ~70 | **配置解析模块**：解析 REPO-GROUPS.md，提取分组和仓库信息 |
-| `lib/clone.sh` | ~50 | **仓库克隆模块**：实现单个仓库克隆，使用 --jobs 参数 |
+| `main.py` | ~150 | **主入口**：解析命令行参数、协调各模块执行、统计报告 |
+| `lib/config.py` | ~130 | **配置解析模块**：解析 REPO-GROUPS.md，提取分组和仓库信息 |
+| `lib/clone.py` | ~180 | **仓库克隆模块**：实现单个仓库克隆，使用 --jobs 参数 |
+| `lib/parallel.py` | ~50 | **并行控制模块**：使用 ThreadPoolExecutor 实现并行克隆 |
+| `lib/failed_repos.py` | ~80 | **失败列表生成模块**：生成 REPO-GROUPS.md 格式的失败列表 |
+| `lib/logger.py` | ~60 | **日志输出模块**：提供统一的日志输出功能 |
+| `lib/args.py` | ~90 | **参数解析模块**：命令行参数解析和验证 |
+| `lib/paths.py` | ~50 | **路径处理模块**：跨平台路径处理 |
+| `lib/check.py` | ~100 | **仓库完整性检查模块**：使用 git fsck 验证仓库完整性 |
+| **总计** | **~890** | **9 个文件** |
+
+#### Bash 版本文件列表
+
+| 文件 | 行数 | 功能说明 |
+|------|------|----------|
+| `main.sh` | ~437 | **主入口**：解析命令行参数、协调各模块执行、并行任务管理 |
+| `lib/config.sh` | ~96 | **配置解析模块**：解析 REPO-GROUPS.md，提取分组和仓库信息 |
+| `lib/clone.sh` | ~104 | **仓库克隆模块**：实现单个仓库克隆，使用 --jobs 参数 |
 | `lib/logger.sh` | ~50 | **日志输出模块**：提供统一的日志输出功能 |
-| **总计** | **~370** | **4 个文件** |
+| **总计** | **~687** | **4 个文件** |
 

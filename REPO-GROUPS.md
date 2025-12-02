@@ -48,7 +48,7 @@
 - repo-content-classification
 
 ## Tools <!-- 382号高地 -->
-- github-repos-batch-sync-script
+- gh-repos-batch-clone
 - get_jobs
 - geekgeekrun
 - hugo
