@@ -6,7 +6,83 @@
 - **Python 版本**（推荐）：`main.py` - 代码更清晰，易于维护
 - **Bash 版本**：`main.sh` - 无需额外依赖，直接运行
 
-## 一、🚀 快速开始
+## 一、📋 常用命令速查
+
+> **最常用的命令都在这里，快速查找，直接使用！**
+
+### Python 版本（推荐）
+
+#### 基础克隆命令
+```bash
+# 使用默认参数，从 REPO-GROUPS.md 解析所有仓库（最常用）
+python main.py
+
+# 自定义并行参数（推荐：高带宽使用）
+python main.py -t 10 -c 16
+
+# 从失败列表重新执行失败的仓库
+python main.py -f failed-repos.txt
+
+# 从自定义列表文件执行
+python main.py -f custom-list.md
+```
+
+#### 检查命令
+```bash
+# 只检查已存在的仓库，不执行克隆
+python main.py --check-only
+
+# 检查失败列表中的仓库
+python main.py -f failed-repos.txt --check-only
+
+# 检查所有仓库（从配置文件读取）
+python main.py --check-only -t 10
+```
+
+#### 高级用法
+```bash
+# 查看帮助信息
+python main.py --help
+
+# 低带宽优化配置
+python main.py -t 3 -c 4
+
+# 超高带宽配置（300Mbps+）
+python main.py -t 20 -c 32
+```
+
+### Bash 版本
+
+#### 基础克隆命令
+```bash
+# 使用默认参数，从 REPO-GROUPS.md 解析所有仓库（最常用）
+bash main.sh
+
+# 自定义并行参数
+bash main.sh -t 10 -c 16
+
+# 从失败列表重新执行失败的仓库
+bash main.sh -f failed-repos.txt
+
+# 从自定义列表文件执行
+bash main.sh -f custom-list.md
+```
+
+#### 高级用法
+```bash
+# 查看帮助信息
+bash main.sh --help
+
+# 低带宽优化配置
+bash main.sh -t 3 -c 4
+
+# 超高带宽配置（300Mbps+）
+bash main.sh -t 20 -c 32
+```
+
+---
+
+## 二、🚀 快速开始
 
 ### Python 版本（推荐）
 
@@ -31,16 +107,6 @@
    # 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
    # 克隆完成后会自动检查仓库完整性
    python main.py
-   
-   # 如果有失败的仓库，会自动生成 failed-repos.txt
-   # 可以重新执行失败的仓库
-   python main.py -f failed-repos.txt
-   
-   # 只检查已存在的仓库，不执行克隆
-   python main.py --check-only
-   
-   # 检查失败列表中的仓库
-   python main.py -f failed-repos.txt --check-only
    ```
 
 ### Bash 版本
@@ -71,13 +137,9 @@
    ```bash
    # 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
    bash main.sh
-   
-   # 如果有失败的仓库，会自动生成 failed-repos.txt
-   # 可以重新执行失败的仓库
-   bash main.sh -f failed-repos.txt
    ```
 
-## 二、🎯 核心特点
+## 三、🎯 核心特点
 
 ### 🚀 一键批量克隆
 **核心功能**：自动扫描所有分组，批量克隆所有仓库，无需手动逐个操作。
@@ -103,7 +165,7 @@
 ### ✅ 仓库完整性检查
 **质量保证**：克隆完成后自动使用 `git fsck` 检查仓库完整性，确保克隆的仓库可用。支持单独检查模式，可以随时验证已存在的仓库。
 
-## 三、⚙️ 自定义参数
+## 四、⚙️ 自定义参数
 
 ### 并发参数配置
 
@@ -123,49 +185,7 @@
 - **高带宽（50-200Mbps）**：`-t 10-15 -c 16-24`
 - **超高带宽（> 200Mbps，如 300Mbps）**：`-t 15-20 -c 24-32`
 
-#### 使用示例
-
-**Python 版本**：
-```bash
-# 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
-python main.py
-
-# 自定义并行参数
-python main.py -t 10 -c 16
-
-# 从失败列表重新执行失败的仓库
-python main.py -f failed-repos.txt
-
-# 从自定义列表文件执行
-python main.py -f custom-list.txt -t 10 -c 16
-
-# 只检查已存在的仓库，不执行克隆
-python main.py --check-only
-
-# 检查失败列表中的仓库
-python main.py -f failed-repos.txt --check-only
-
-# 查看帮助信息
-python main.py --help
-```
-
-**Bash 版本**：
-```bash
-# 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
-bash main.sh
-
-# 自定义并行参数
-bash main.sh -t 10 -c 16
-
-# 从失败列表重新执行失败的仓库
-bash main.sh -f failed-repos.txt
-
-# 从自定义列表文件执行
-bash main.sh -f custom-list.txt -t 10 -c 16
-
-# 查看帮助信息
-bash main.sh --help
-```
+> 💡 **提示**：所有命令示例已集中在[第一章：常用命令速查](#一常用命令速查)，可直接查看使用。
 
 ### 任务列表文件功能
 
@@ -198,44 +218,11 @@ bash main.sh --help
 
 #### 使用场景
 
-1. **重新执行失败的仓库**：
-   ```bash
-   # Python 版本
-   python main.py -t 10 -c 16
-   python main.py -f failed-repos.txt -t 10 -c 16
-   
-   # Bash 版本
-   bash main.sh -t 10 -c 16
-   bash main.sh -f failed-repos.txt -t 10 -c 16
-   ```
+1. **重新执行失败的仓库**：使用 `-f failed-repos.txt` 参数（详见[常用命令速查](#一常用命令速查)）
+2. **执行自定义仓库列表**：使用 `-f custom-list.md` 参数（详见[常用命令速查](#一常用命令速查)）
+3. **分批执行**：将大量仓库分成多个列表文件，分别执行（详见[常用命令速查](#一常用命令速查)）
 
-2. **执行自定义仓库列表**：
-   ```bash
-   # 创建自定义列表文件 custom-list.md（REPO-GROUPS.md 格式）
-   # 编辑文件，添加要克隆的仓库分组
-   
-   # Python 版本
-   python main.py -f custom-list.md
-   
-   # Bash 版本
-   bash main.sh -f custom-list.md
-   ```
-
-3. **分批执行**：
-   ```bash
-   # 可以将大量仓库分成多个列表文件
-   # 分别执行，避免一次性执行太多
-   
-   # Python 版本
-   python main.py -f list-1.txt
-   python main.py -f list-2.txt
-   
-   # Bash 版本
-   bash main.sh -f list-1.txt
-   bash main.sh -f list-2.txt
-   ```
-
-## 四、✅ 仓库完整性检查
+## 五、✅ 仓库完整性检查
 
 ### 功能说明
 
@@ -265,28 +252,10 @@ bash main.sh --help
 
 ### 使用方式
 
-#### 自动检查（默认）
+- **自动检查（默认）**：正常克隆时，克隆完成后会自动检查所有成功克隆的仓库
+- **单独检查模式**：使用 `--check-only` 参数，只检查已存在的仓库，不执行克隆
 
-```bash
-# 正常克隆，克隆完成后自动检查
-python main.py
-
-# 克隆完成后，会自动检查所有成功克隆的仓库
-# 检查失败的仓库会被标记为失败，加入失败列表
-```
-
-#### 单独检查模式
-
-```bash
-# 只检查已存在的仓库，不执行克隆
-python main.py --check-only
-
-# 检查失败列表中的仓库
-python main.py -f failed-repos.txt --check-only
-
-# 检查所有仓库（从配置文件读取）
-python main.py --check-only -t 10
-```
+> 💡 **提示**：所有检查命令示例已集中在[第一章：常用命令速查](#一常用命令速查)，可直接查看使用。
 
 ### 检查结果
 
@@ -299,7 +268,7 @@ python main.py --check-only -t 10
 - 检查超时时间默认为 30 秒，大仓库可能需要更长时间
 - 检查失败的仓库会被标记为失败，建议重新克隆
 
-## 五、📐 架构设计
+## 六、📐 架构设计
 
 ### 核心设计原则
 
