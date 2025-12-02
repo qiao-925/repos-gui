@@ -1,7 +1,6 @@
 ---
 description: "GitHub 仓库同步脚本工作流文档维护规范"
 globs:
-  - "sync-groups-v2.sh"
   - "main.sh"
   - "README.md"
 alwaysApply: true
@@ -16,7 +15,7 @@ priority: 1
 
 ## 强制要求
 
-**任何对 `sync-groups-v2.sh` 或 `main.sh` 的修改都必须同步更新 `README.md` 中的"工作流与架构文档"部分**
+**任何对 `main.sh` 的修改都必须同步更新 `README.md` 中的"工作流与架构文档"部分**
 
 ## 需要更新工作流文档的情况
 
@@ -75,7 +74,6 @@ priority: 1
 ## 参考文档
 
 - `README.md` - 使用说明和工作流与架构文档（合并后的完整文档）
-- `MAINTENANCE-CHECKLIST.md` - 代码修改维护检查清单
 
 ## 重要提醒
 

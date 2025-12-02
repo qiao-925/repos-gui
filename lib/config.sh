@@ -1,111 +1,95 @@
 #!/bin/bash
-# 配置解析模块：提供配置文件解析和分组管理功能
+# 配置解析模块：解析 REPO-GROUPS.md 配置文件
 #
 # 主要功能：
-#   - get_all_group_names()：获取所有分组名称
-#   - find_group_name()：根据输入查找分组名称（支持部分匹配）
-#   - get_group_highland()：获取分组的高地编号
-#   - get_group_folder()：获取分组文件夹名称（组名 + 高地编号）
-#   - get_group_repos()：获取分组下的所有仓库名称
+#   - parse_repo_groups()：解析配置文件，提取所有分组和仓库信息
+#   - get_group_folder()：根据分组名和高地编号生成文件夹路径
 #
-# 特性：
-#   - 使用全局缓存优化性能（避免重复解析配置文件）
-#   - 支持部分匹配查找分组
+# 配置文件格式：
+#   ## 分组名 <!-- 高地编号 -->
+#   - 仓库名1
+#   - 仓库名2
 
-# ========== 常量定义 ==========
+readonly CONFIG_FILE="REPO-GROUPS.md"
 
-readonly REPOS_DIR="repos"  # 仓库存储目录
+# 获取项目目录（脚本所在目录）
+# 如果 SCRIPT_DIR 已定义（从 main.sh 传入），使用它；否则动态计算
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+# repos 目录放在项目目录的上一级（同级目录）
+# SCRIPT_DIR 已经是项目目录，所以上一级是 SCRIPT_DIR/..
+readonly REPOS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)/repos"
 
-# 仓库大小阈值常量（单位：KB）
-readonly REPO_SIZE_LARGE_THRESHOLD=307200   # 300MB = 307200 KB（超过此大小使用浅克隆）
-readonly REPO_SIZE_HUGE_THRESHOLD=1048576   # 1GB = 1048576 KB（超大仓库阈值）
+# 仓库所有者（从配置文件第一行提取）
+REPO_OWNER=""
 
-# ========== 全局缓存变量声明（性能优化） ==========
-# 仓库名称映射缓存：repo_name -> repo_full (owner/repo)
-declare -gA REPO_FULL_NAME_CACHE
-
-# 仓库大小缓存：repo_full -> size_kb（在 github-api-query.sh 中使用）
-declare -gA REPO_SIZE_CACHE
-
-# 配置文件解析缓存
-declare -gA GROUP_REPOS_CACHE        # group_name -> 仓库列表（多行字符串）
-declare -gA GROUP_HIGHLAND_CACHE     # group_name -> 高地编号
-declare -ga ALL_GROUP_NAMES_CACHE    # 所有分组名数组
-declare -g CONFIG_FILE_CACHE_LOADED=0  # 配置文件是否已加载缓存
-
-
-# 确保配置缓存已加载（辅助函数）
-_ensure_config_cache() {
-    if [ "$CONFIG_FILE_CACHE_LOADED" -eq 0 ]; then
-        init_config_cache || return 1
-    fi
-}
-
-# 获取所有分组名称（使用缓存）
-get_all_group_names() {
-    _ensure_config_cache || return 1
-    printf '%s\n' "${ALL_GROUP_NAMES_CACHE[@]}"
-}
-
-# 根据输入查找分组名称（支持部分匹配）- 使用缓存优化
-find_group_name() {
-    local input=$1
-    _ensure_config_cache || return 1
+# 解析配置文件，提取分组和仓库信息
+# 输出格式：每行一个任务，格式为 "repo_full|repo_name|group_folder|group_name"
+parse_repo_groups() {
+    local config_file="${1:-$CONFIG_FILE}"
     
-    # 在一次遍历中完成精确匹配和部分匹配
-    local input_lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
-    for group_name in "${ALL_GROUP_NAMES_CACHE[@]}"; do
-        # 精确匹配
-        if [ "$group_name" = "$input" ]; then
-            echo "$group_name"
-            return 0
-        fi
+    # 如果配置文件是相对路径，使用项目目录
+    if [[ ! "$config_file" =~ ^/ ]] && [[ ! "$config_file" =~ ^[A-Za-z]: ]]; then
+        config_file="${SCRIPT_DIR}/${config_file}"
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        log_error "配置文件不存在: $config_file"
+        return 1
+    fi
+    
+    # 提取仓库所有者（第一行：仓库所有者: xxx）
+    REPO_OWNER=$(grep -E "^仓库所有者:" "$config_file" | head -1 | sed 's/仓库所有者:[[:space:]]*//')
+    
+    if [[ -z "$REPO_OWNER" ]]; then
+        log_error "未找到仓库所有者信息"
+        return 1
+    fi
+    
+    local current_group=""
+    local current_group_folder=""
+    local current_highland=""
+    
+    # 定义正则表达式模式（避免在 [[ =~ ]] 中直接使用 < > 字符）
+    local group_pattern='^##[[:space:]]+([^<]+)[[:space:]]*<!--[[:space:]]*([^>]+)[[:space:]]*-->'
+    local repo_pattern='^-[[:space:]]+([^[:space:]]+)'
+    
+    while IFS= read -r line; do
+        # 匹配分组标题：## 分组名 <!-- 高地编号 -->
+        if [[ "$line" =~ $group_pattern ]]; then
+            # 去除分组名两端空格
+            current_group="${BASH_REMATCH[1]}"
+            current_group="${current_group#"${current_group%%[![:space:]]*}"}"
+            current_group="${current_group%"${current_group##*[![:space:]]}"}"
+            # 去除高地编号两端空格
+            current_highland="${BASH_REMATCH[2]}"
+            current_highland="${current_highland#"${current_highland%%[![:space:]]*}"}"
+            current_highland="${current_highland%"${current_highland##*[![:space:]]}"}"
+            current_group_folder=$(get_group_folder "$current_group" "$current_highland")
         
-        # 部分匹配（不区分大小写）
-        local group_lower=$(echo "$group_name" | tr '[:upper:]' '[:lower:]')
-        if [[ "$group_lower" == *"$input_lower"* ]]; then
-            echo "$group_name"
-            return 0
+        # 匹配仓库列表项：- 仓库名
+        elif [[ "$line" =~ $repo_pattern ]]; then
+            local repo_name="${BASH_REMATCH[1]}"
+            local repo_full="${REPO_OWNER}/${repo_name}"
+            
+            if [[ -n "$current_group" && -n "$current_group_folder" ]]; then
+                echo "${repo_full}|${repo_name}|${current_group_folder}|${current_group}"
+            fi
         fi
-    done
-    
-    return 1
+    done < "$config_file"
 }
 
-# 获取分组的高地编号（使用缓存）
-get_group_highland() {
-    local group_name=$1
-    _ensure_config_cache || return 1
-    
-    if [ -n "${GROUP_HIGHLAND_CACHE[$group_name]}" ]; then
-        echo "${GROUP_HIGHLAND_CACHE[$group_name]}"
-        return 0
-    fi
-    return 1
-}
-
-# 获取分组文件夹名称（组名 + 高地编号）
+# 根据分组名和高地编号生成文件夹路径
+# 格式：组名 (高地编号)
 get_group_folder() {
-    local group_name=$1
-    local highland=$(get_group_highland "$group_name")
+    local group_name="$1"
+    local highland="$2"
     
-    # 新的目录结构：repos/分组名 (高地编号)
-    if [ -n "$highland" ]; then
-        echo "$REPOS_DIR/$group_name ($highland)"
+    if [[ -n "$highland" ]]; then
+        echo "${REPOS_DIR}/${group_name} (${highland})"
     else
-        echo "$REPOS_DIR/$group_name"
+        echo "${REPOS_DIR}/${group_name}"
     fi
-}
-
-# 获取分组下的所有仓库名称（使用缓存）
-get_group_repos() {
-    local group_name=$1
-    _ensure_config_cache || return 1
-    
-    if [ -n "${GROUP_REPOS_CACHE[$group_name]}" ]; then
-        echo "${GROUP_REPOS_CACHE[$group_name]}"
-        return 0
-    fi
-    return 1
 }
 

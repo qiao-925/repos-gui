@@ -1,177 +1,317 @@
 #!/bin/bash
-# GitHub 仓库批量克隆工具 - 主入口
+# GitHub 仓库批量克隆脚本：极简设计，专注于核心功能
 #
-# 核心功能：
-#   - 批量克隆：从配置文件读取仓库列表，批量克隆到本地
-#   - 并发控制：通过 -t N 参数控制并行任务数（默认5）
-#   - 并行传输：通过 -c N 参数控制每个仓库的并行连接数（默认8）
-#   - 智能重试：每个仓库克隆失败后立即重试3次（带间隔）
-#   - 自动清理：克隆失败后自动删除不完整的目录
-#   - 二次执行：已存在的仓库自动跳过，只克隆缺失的
+# 主要功能：
+#   - 解析命令行参数（-t 并行任务数，-c 并行传输数）
+#   - 读取并解析 REPO-GROUPS.md 配置文件
+#   - 并行批量克隆所有仓库
+#   - 输出最终统计报告
+#
+# 执行流程：
+#   1. 解析命令行参数
+#   2. 加载配置文件
+#   3. 构建克隆任务列表
+#   4. 并行执行克隆
+#   5. 输出统计报告
+#
+# 特性：
+#   - 双重并行：应用层并行（-t） + Git 层并行传输（-c）
+#   - 直接覆盖：不检查仓库是否存在，直接克隆
 
-# ============================================
-# 配置和常量定义
-# ============================================
-readonly CONFIG_FILE="REPO-GROUPS.md"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly GIT_CLONE_JOBS_MAX=64  # 并行传输数最大值
+set -euo pipefail
 
-# 切换到脚本目录，确保相对路径正确
-cd "$SCRIPT_DIR" || {
-    echo "错误: 无法切换到脚本目录: $SCRIPT_DIR" >&2
-    exit 1
-}
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# 导出变量供其他模块使用
-export SCRIPT_DIR
-export CONFIG_FILE
-# 注意：REPOS_DIR 在 config.sh 中定义，加载 config.sh 后可用
+# 加载模块
+source "${SCRIPT_DIR}/lib/logger.sh"
+source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/lib/clone.sh"
 
-# ============================================
-# 加载所有模块
-# ============================================
-# 按依赖顺序加载模块
-source "$SCRIPT_DIR/lib/logger.sh"      # 日志输出（无依赖）
-source "$SCRIPT_DIR/lib/utils.sh"       # 工具函数（无依赖）
-source "$SCRIPT_DIR/lib/progress.sh"    # 进度显示（无依赖）
-source "$SCRIPT_DIR/lib/config.sh"      # 配置解析（依赖 logger, utils）
-source "$SCRIPT_DIR/lib/cache.sh"       # 缓存初始化（依赖 logger, config）
-source "$SCRIPT_DIR/lib/github-api-query.sh"      # GitHub API 查询（依赖 logger）
-source "$SCRIPT_DIR/lib/repo-clone-update.sh"     # 仓库克隆操作（依赖 logger, github-api-query, utils）
-source "$SCRIPT_DIR/lib/stats.sh"                 # 统计和错误记录（依赖 logger）
-source "$SCRIPT_DIR/lib/diff-analysis.sh"         # 差异分析（依赖 logger, github-api-query, cache, config）
-source "$SCRIPT_DIR/lib/sync-orchestration.sh"    # 克隆编排和策略（依赖所有其他模块）
+# 默认参数
+PARALLEL_TASKS=5      # 并行任务数（应用层）
+PARALLEL_CONNECTIONS=8 # 并行传输数（Git 层）
 
-# ============================================
-# 命令行参数解析
-# ============================================
+# 任务列表文件（可选）
+TASK_LIST_FILE=""     # 如果指定，从文件读取任务列表；否则从 REPO-GROUPS.md 解析
+FAILED_REPOS_FILE="${SCRIPT_DIR}/failed-repos.txt"  # 失败列表文件
 
+# 统计变量
+TOTAL_REPOS=0
+SUCCESS_COUNT=0
+FAIL_COUNT=0
+START_TIME=$(date +%s)
+
+# 解析命令行参数
 parse_args() {
-    # 默认值
-    PARALLEL_JOBS=${PARALLEL_JOBS:-5}      # 并行任务数（同时克隆多少个仓库）
-    GIT_CLONE_JOBS=${GIT_CLONE_JOBS:-8}   # 并行传输数（每个仓库克隆时使用多少个连接）
-    
-    # 解析命令行参数
     while [[ $# -gt 0 ]]; do
-        case $1 in
-            -t)
-                if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
-                    PARALLEL_JOBS="$2"
-                    shift 2
-                else
-                    print_error "-t 需要指定一个数字"
-                    print_info "用法: -t <数字>"
-                    exit 1
-                fi
+        case "$1" in
+            -t|--tasks)
+                PARALLEL_TASKS="$2"
+                shift 2
                 ;;
-            -c)
-                if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
-                    GIT_CLONE_JOBS="$2"
-                    shift 2
-                else
-                    print_error "-c 需要指定一个数字"
-                    print_info "用法: -c <数字>"
-                    exit 1
-                fi
+            -c|--connections)
+                PARALLEL_CONNECTIONS="$2"
+                shift 2
                 ;;
-            --help|-h)
-                echo "用法: $0 [选项]"
-                echo ""
-                echo "选项:"
-                echo "  -t <数字>  设置并行任务数（同时克隆多少个仓库，默认: 5）"
-                echo "  -c <数字>  设置并行传输数（每个仓库克隆时的连接数，默认: 8）"
-                echo "  --help, -h  显示此帮助信息"
-                echo ""
-                echo "说明:"
-                echo "  -t 参数：控制脚本层面的并行度（同时克隆多少个不同的仓库）"
-                echo "  -c 参数：控制 Git 层面的并行度（单个仓库克隆时使用多少个连接）"
-                echo "  两者可以叠加使用，效果更佳"
-                echo ""
-                echo "示例:"
-                echo "  $0              # 使用默认值（-t 5, -c 8）"
-                echo "  $0 -t 10        # 同时克隆 10 个仓库，每个使用 8 个连接"
-                echo "  $0 -c 16        # 同时克隆 5 个仓库，每个使用 16 个连接"
-                echo "  $0 -t 10 -c 16  # 同时克隆 10 个仓库，每个使用 16 个连接"
+            -f|--file)
+                TASK_LIST_FILE="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_help
                 exit 0
                 ;;
             *)
-                print_error "未知参数: $1"
-                print_info "使用 --help 查看帮助信息"
+                log_error "未知参数: $1"
+                show_help
                 exit 1
                 ;;
         esac
     done
     
-    # 验证并行任务数是否为有效数字
-    if ! [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] || [ "$PARALLEL_JOBS" -lt 1 ]; then
-        print_error "并行任务数必须是大于 0 的整数，当前值: $PARALLEL_JOBS"
+    # 验证参数
+    if ! [[ "$PARALLEL_TASKS" =~ ^[0-9]+$ ]] || [[ "$PARALLEL_TASKS" -lt 1 ]]; then
+        log_error "并行任务数必须是正整数: $PARALLEL_TASKS"
         exit 1
     fi
     
-    # 验证并行传输数是否为有效数字
-    if ! [[ "$GIT_CLONE_JOBS" =~ ^[0-9]+$ ]] || [ "$GIT_CLONE_JOBS" -lt 1 ]; then
-        print_error "并行传输数必须是大于 0 的整数，当前值: $GIT_CLONE_JOBS"
+    if ! [[ "$PARALLEL_CONNECTIONS" =~ ^[0-9]+$ ]] || [[ "$PARALLEL_CONNECTIONS" -lt 1 ]]; then
+        log_error "并行传输数必须是正整数: $PARALLEL_CONNECTIONS"
         exit 1
     fi
-    
-    # 限制并行传输数最大值（高带宽环境可以支持更多连接）
-    if [ "$GIT_CLONE_JOBS" -gt "$GIT_CLONE_JOBS_MAX" ]; then
-        print_warning "并行传输数过大（$GIT_CLONE_JOBS），已限制为 $GIT_CLONE_JOBS_MAX"
-        GIT_CLONE_JOBS=$GIT_CLONE_JOBS_MAX
-    fi
-    
-    # 导出为环境变量，供后续模块使用
-    export PARALLEL_JOBS
-    export GIT_CLONE_JOBS
 }
 
-# ============================================
-# 主函数
-# ============================================
+# 显示帮助信息
+show_help() {
+    cat << EOF
+GitHub 仓库批量克隆脚本
 
+用法: $0 [选项]
+
+选项:
+  -t, --tasks NUM          并行任务数（同时克隆的仓库数量，默认: 5）
+  -c, --connections NUM    并行传输数（每个仓库的 Git 连接数，默认: 8）
+  -f, --file FILE          指定任务列表文件（格式：repo_full|repo_name|group_folder|group_name）
+                           如果不指定，默认从 REPO-GROUPS.md 解析
+  -h, --help               显示此帮助信息
+
+示例:
+  $0                        # 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
+  $0 -t 10 -c 16            # 并行任务数 10，并行传输数 16
+  $0 -f failed-repos.txt    # 从失败列表文件重新执行失败的仓库
+  $0 -f custom-list.txt     # 从自定义列表文件执行
+
+任务列表文件格式（每行一个任务）:
+  owner/repo|repo_name|group_folder|group_name
+
+执行完成后，失败的仓库会自动保存到 failed-repos.txt
+EOF
+}
+
+# 执行单个克隆任务（用于并行调用）
+execute_clone_task() {
+    # 在子shell中执行，禁用错误退出，避免影响主进程
+    set +e
+    local task="$1"
+    local parallel_connections="$2"
+    
+    # 解析任务：repo_full|repo_name|group_folder|group_name
+    IFS='|' read -r repo_full repo_name group_folder group_name <<< "$task"
+    
+    # 执行克隆，日志会直接输出
+    if clone_repo "$repo_full" "$repo_name" "$group_folder" "$parallel_connections"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# 并行执行克隆任务
+execute_parallel_clone() {
+    local tasks=("$@")
+    local total="${#tasks[@]}"
+    
+    if [[ $total -eq 0 ]]; then
+        log_warning "没有需要克隆的仓库"
+        return 0
+    fi
+    
+    log_info "开始批量克隆，共 $total 个仓库"
+    log_info "并行任务数: $PARALLEL_TASKS, 并行传输数: $PARALLEL_CONNECTIONS"
+    
+    # 使用结果文件收集所有任务的结果
+    # Windows 兼容：使用环境变量或项目目录
+    local tmp_dir="${TMP:-${TEMP:-/tmp}}"
+    if [[ ! -d "$tmp_dir" ]]; then
+        tmp_dir="${SCRIPT_DIR}/.tmp"
+        mkdir -p "$tmp_dir"
+    fi
+    local result_file="${tmp_dir}/clone_results_$$.txt"
+    > "$result_file"  # 清空结果文件
+    
+    # 使用后台进程 + wait 实现并行控制
+    local running=0
+    local task_index=0
+    local pids=()
+    
+    # 临时禁用错误退出，避免算术运算失败导致脚本退出
+    set +e
+    
+    while [[ $task_index -lt $total ]] || [[ $running -gt 0 ]]; do
+        # 启动新任务（如果还有未处理的任务且未达到并发限制）
+        while [[ $running -lt $PARALLEL_TASKS ]] && [[ $task_index -lt $total ]]; do
+            local task="${tasks[$task_index]}"
+            
+            # 在后台执行克隆任务
+            # 使用子shell并禁用错误退出，避免后台进程错误导致主脚本退出
+            # 直接执行，不使用命令替换，让 Git 的输出实时显示
+            (
+                set +e
+                # 直接执行，输出直接到终端（实时显示）
+                execute_clone_task "$task" "$PARALLEL_CONNECTIONS"
+                local exit_code=$?
+                # 只把结果写入文件
+                if [[ $exit_code -eq 0 ]]; then
+                    echo "SUCCESS" >> "$result_file"
+                else
+                    echo "FAIL" >> "$result_file"
+                fi
+            ) &
+            
+            local pid=$!
+            pids+=("$pid")
+            ((task_index++)) || true
+            ((running++)) || true
+        done
+        
+        # 检查已完成的任务
+        local new_pids=()
+        for pid in "${pids[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                new_pids+=("$pid")
+            else
+                # 任务完成
+                wait "$pid" 2>/dev/null || true
+                ((running--)) || running=0
+            fi
+        done
+        pids=("${new_pids[@]}")
+        
+        # 短暂休眠，避免 CPU 占用过高
+        sleep 0.1
+    done
+    
+    # 等待所有任务完成
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+    
+    # 恢复错误退出
+    set -e
+    
+    # 统计结果并记录失败的仓库
+    if [[ -f "$result_file" ]]; then
+        > "$FAILED_REPOS_FILE"  # 清空失败列表
+        local task_index=0
+        while IFS= read -r result; do
+            if [[ "$result" == "SUCCESS" ]]; then
+                ((SUCCESS_COUNT++)) || true
+            elif [[ "$result" == "FAIL" ]]; then
+                ((FAIL_COUNT++)) || true
+                # 记录失败的仓库到文件
+                if [[ $task_index -lt $total ]]; then
+                    echo "${tasks[$task_index]}" >> "$FAILED_REPOS_FILE"
+                fi
+            fi
+            ((task_index++)) || true
+        done < "$result_file"
+        rm -f "$result_file"
+        
+        # 如果有失败的仓库，提示用户
+        if [[ $FAIL_COUNT -gt 0 ]] && [[ -s "$FAILED_REPOS_FILE" ]]; then
+            log_warning "有 $FAIL_COUNT 个仓库克隆失败"
+            log_info "失败列表已保存到: $FAILED_REPOS_FILE"
+            log_info "可以使用以下命令重新执行失败的仓库:"
+            log_info "  bash main.sh -f $FAILED_REPOS_FILE"
+        fi
+    else
+        log_warning "结果文件不存在: $result_file"
+    fi
+    
+    log_info "并行克隆执行完成，成功: $SUCCESS_COUNT, 失败: $FAIL_COUNT"
+}
+
+# 输出最终统计
+print_summary() {
+    local end_time=$(date +%s)
+    local duration=$((end_time - START_TIME))
+    local hours=$((duration / 3600))
+    local minutes=$(((duration % 3600) / 60))
+    local seconds=$((duration % 60))
+    
+    echo ""
+    log_info "========== 克隆完成 =========="
+    log_info "总仓库数: $TOTAL_REPOS"
+    log_success "成功: $SUCCESS_COUNT"
+    
+    if [[ $FAIL_COUNT -gt 0 ]]; then
+        log_error "失败: $FAIL_COUNT"
+    else
+        log_info "失败: $FAIL_COUNT"
+    fi
+    
+    log_info "耗时: ${hours}小时 ${minutes}分钟 ${seconds}秒"
+    log_info "=============================="
+}
+
+# 主函数
 main() {
-    # 0. 解析命令行参数
+    log_info "GitHub 仓库批量克隆脚本启动"
+    
+    # 解析命令行参数
     parse_args "$@"
     
-    # 1. 初始化同步环境
-    initialize_sync || exit 1
+    # 获取任务列表
+    local tasks
     
-    # 2. 初始化所有缓存（性能优化：一次性加载所有数据，避免重复文件系统遍历）
-    echo ""
-    print_step "初始化缓存系统..."
-    init_config_cache || exit 1
-    init_repo_cache || exit 1
-    echo ""
+    if [[ -n "$TASK_LIST_FILE" ]]; then
+        # 从指定文件读取任务列表
+        if [[ ! -f "$TASK_LIST_FILE" ]]; then
+            log_error "任务列表文件不存在: $TASK_LIST_FILE"
+            exit 1
+        fi
+        log_info "从文件读取任务列表: $TASK_LIST_FILE"
+        mapfile -t tasks < "$TASK_LIST_FILE"
+    else
+        # 默认从配置文件解析
+        log_info "解析配置文件: $CONFIG_FILE"
+        mapfile -t tasks < <(parse_repo_groups)
+    fi
     
-    # 3. 获取所有分组用于克隆（使用缓存）
-    print_info "准备克隆所有分组..."
-    local all_groups=$(get_all_group_names)
-    if [ -z "$all_groups" ]; then
-        print_error "无法读取分组列表"
+    if [[ ${#tasks[@]} -eq 0 ]]; then
+        log_error "未找到任何仓库任务"
         exit 1
     fi
     
-    local groups_array
-    string_to_array groups_array "$all_groups"
+    TOTAL_REPOS=${#tasks[@]}
+    log_info "找到 $TOTAL_REPOS 个仓库任务"
     
-    if [ ${#groups_array[@]} -eq 0 ]; then
-        print_error "配置文件中没有找到任何分组"
+    # 执行并行克隆
+    execute_parallel_clone "${tasks[@]}"
+    
+    # 输出统计
+    print_summary
+    
+    # 返回退出码
+    if [[ $FAIL_COUNT -gt 0 ]]; then
         exit 1
+    else
+        exit 0
     fi
-    
-    print_info "找到 ${#groups_array[@]} 个分组，开始克隆..."
-    echo ""
-    
-    # 5. 全局扫描差异，找出缺失的仓库（只检查缺失，不检查更新）
-    scan_global_diff "${groups_array[@]}" || exit 1
-    
-    # 6. 执行批量克隆（只处理缺失的仓库）
-    execute_sync "${groups_array[@]}" || exit 1
-    
-    # 7. 输出最终统计
-    print_final_summary
 }
 
-# 执行主函数（参数已在 parse_args 中处理）
+# 执行主函数
 main "$@"
 

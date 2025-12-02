@@ -179,15 +179,15 @@ get_config_value() { ... }
 
 ```bash
 # lib/utils.sh - 工具函数模块（职责混乱）
-# 包含了日志、配置、网络请求、数据处理等多种不相关功能
+# 包含了日志、配置、克隆、数据处理等多种不相关功能
 
 log_info() { ... }           # 日志功能
 load_config() { ... }        # 配置功能
-fetch_data() { ... }         # 网络功能
+clone_repo() { ... }         # 克隆功能
 format_date() { ... }        # 数据处理功能
 ```
 
-**改进建议**：拆分为 `logger.sh`、`config.sh`、`network.sh`、`date-utils.sh`
+**改进建议**：拆分为 `logger.sh`、`config.sh`、`clone.sh` 等独立模块
 
 ## 例外情况
 
