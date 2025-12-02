@@ -1,9 +1,31 @@
 #!/bin/bash
-# 配置解析模块
+# 配置解析模块：提供配置文件解析和分组管理功能
+#
+# 主要功能：
+#   - get_all_group_names()：获取所有分组名称
+#   - find_group_name()：根据输入查找分组名称（支持部分匹配）
+#   - get_group_highland()：获取分组的高地编号
+#   - get_group_folder()：获取分组文件夹名称（组名 + 高地编号）
+#   - get_group_repos()：获取分组下的所有仓库名称
+#
+# 特性：
+#   - 使用全局缓存优化性能（避免重复解析配置文件）
+#   - 支持部分匹配查找分组
 
-# 全局缓存变量声明（性能优化）
+# ========== 常量定义 ==========
+
+readonly REPOS_DIR="repos"  # 仓库存储目录
+
+# 仓库大小阈值常量（单位：KB）
+readonly REPO_SIZE_LARGE_THRESHOLD=307200   # 300MB = 307200 KB（超过此大小使用浅克隆）
+readonly REPO_SIZE_HUGE_THRESHOLD=1048576   # 1GB = 1048576 KB（超大仓库阈值）
+
+# ========== 全局缓存变量声明（性能优化） ==========
 # 仓库名称映射缓存：repo_name -> repo_full (owner/repo)
 declare -gA REPO_FULL_NAME_CACHE
+
+# 仓库大小缓存：repo_full -> size_kb（在 github-api-query.sh 中使用）
+declare -gA REPO_SIZE_CACHE
 
 # 配置文件解析缓存
 declare -gA GROUP_REPOS_CACHE        # group_name -> 仓库列表（多行字符串）
@@ -11,40 +33,6 @@ declare -gA GROUP_HIGHLAND_CACHE     # group_name -> 高地编号
 declare -ga ALL_GROUP_NAMES_CACHE    # 所有分组名数组
 declare -g CONFIG_FILE_CACHE_LOADED=0  # 配置文件是否已加载缓存
 
-# 本地仓库缓存
-declare -ga LOCAL_REPOS_CACHE        # 本地仓库完整名称列表
-declare -gA LOCAL_REPOS_MAP          # repo_full -> 1 (快速查找)
-declare -g LOCAL_REPOS_CACHE_LOADED=0  # 本地仓库缓存是否已加载
-
-# 列出所有分组名称（带高地编号）
-list_groups() {
-    if [ ! -f "$CONFIG_FILE" ]; then
-        print_error "配置文件不存在: $CONFIG_FILE"
-        return 1
-    fi
-    
-    echo "可用分组:"
-    echo ""
-    
-    # 获取所有分组名称
-    local all_groups=$(get_all_group_names)
-    local index=1
-    
-    # 遍历每个分组，显示分组名 + 高地编号
-    while IFS= read -r group_name; do
-        if [ -z "$group_name" ]; then
-            continue
-        fi
-        
-        local highland=$(get_group_highland "$group_name")
-        if [ -n "$highland" ]; then
-            printf "%2d. %s (%s)\n" "$index" "$group_name" "$highland"
-        else
-            printf "%2d. %s\n" "$index" "$group_name"
-        fi
-        ((index++))
-    done <<< "$all_groups"
-}
 
 # 确保配置缓存已加载（辅助函数）
 _ensure_config_cache() {
@@ -103,9 +91,9 @@ get_group_folder() {
     
     # 新的目录结构：repos/分组名 (高地编号)
     if [ -n "$highland" ]; then
-        echo "repos/$group_name ($highland)"
+        echo "$REPOS_DIR/$group_name ($highland)"
     else
-        echo "repos/$group_name"
+        echo "$REPOS_DIR/$group_name"
     fi
 }
 

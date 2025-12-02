@@ -1,5 +1,19 @@
 #!/bin/bash
-# 缓存初始化模块
+# 缓存初始化模块：负责初始化配置文件和仓库名称缓存
+#
+# 主要功能：
+#   - init_config_cache()：初始化配置文件缓存（一次性解析 REPO-GROUPS.md）
+#   - init_repo_cache()：初始化仓库名称缓存（批量获取所有远程仓库）
+#
+# 特性：
+#   - 一次性加载所有数据到内存，避免重复 I/O 和 API 调用
+#   - 建立仓库名称映射（repo_name -> repo_full）
+
+# ========== 常量定义 ==========
+
+readonly REPO_LIST_LIMIT=1000  # GitHub API 仓库列表限制
+
+# ========== 主要函数 ==========
 
 # 初始化配置文件缓存（一次性解析配置文件）
 init_config_cache() {
@@ -93,7 +107,7 @@ init_repo_cache() {
     
     # 获取所有仓库（使用日志和计时）
     local all_repos
-    all_repos=$(log_api_call "批量获取远程仓库列表" gh repo list --limit 1000 --json nameWithOwner --jq '.[].nameWithOwner')
+    all_repos=$(log_api_call "批量获取远程仓库列表" gh repo list --limit "$REPO_LIST_LIMIT" --json nameWithOwner --jq '.[].nameWithOwner')
     local gh_exit_code=$?
     
     if [ $gh_exit_code -ne 0 ]; then
@@ -133,40 +147,4 @@ init_repo_cache() {
     fi
 }
 
-# 初始化本地仓库缓存（扫描本地所有仓库）
-init_local_repo_cache() {
-    if [ "$LOCAL_REPOS_CACHE_LOADED" -eq 1 ]; then
-        return 0  # 已加载，直接返回
-    fi
-    
-    print_step "扫描本地仓库并建立缓存..."
-    
-    # 清空缓存
-    LOCAL_REPOS_CACHE=()
-    LOCAL_REPOS_MAP=()
-    
-    # 遍历所有分组文件夹
-    for group_folder in "${!group_folders[@]}"; do
-        if [ ! -d "$group_folder" ]; then
-            continue
-        fi
-        
-        shopt -s nullglob
-        for dir in "$group_folder"/*; do
-            if [ -d "$dir" ] && [ -d "$dir/.git" ]; then
-                local repo_name=$(basename "$dir")
-                # 从缓存中查找完整名称
-                if [ -n "${REPO_FULL_NAME_CACHE[$repo_name]}" ]; then
-                    local repo_full="${REPO_FULL_NAME_CACHE[$repo_name]}"
-                    LOCAL_REPOS_CACHE+=("$repo_full")
-                    LOCAL_REPOS_MAP["$repo_full"]=1
-                fi
-            fi
-        done
-        shopt -u nullglob
-    done
-    
-    LOCAL_REPOS_CACHE_LOADED=1
-    print_success "本地仓库缓存已建立，共 ${#LOCAL_REPOS_CACHE[@]} 个仓库"
-}
 

@@ -27,8 +27,13 @@
 
 **同步分组**
 ```bash
-bash sync-groups.sh 597.9          # 同步单个分组
-bash sync-groups.sh 597.9 537.7 54 # 同步多个分组
-bash sync-groups.sh --list         # 列出所有分组
+# 批量同步所有分组（推荐）
+bash sync-groups-v2.sh
+
+# 查看帮助信息
+bash sync-groups-v2.sh --help
+
+# 配置并行参数（可选）
+bash sync-groups-v2.sh -t 10 -c 16  # 并行任务数 10，并行传输数 16
 ```
 
