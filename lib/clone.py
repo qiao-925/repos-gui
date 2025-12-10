@@ -6,7 +6,7 @@
 # 特性：
 #   - 自动选择最优协议（SSH 优先，回退到 HTTPS）
 #   - Git 配置优化（网络、压缩、多线程）
-#   - 直接克隆，不检查是否存在（覆盖）
+#   - 增量更新：先检查仓库是否存在且完整，存在且完整则跳过克隆
 #   - 失败时输出错误信息
 
 import os
@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from lib.check import check_repo
 from lib.logger import log_error, log_info, log_success
 
 
@@ -119,8 +120,24 @@ def clone_repo(
     # 构建目标路径
     target_path = Path(group_folder) / repo_name
     
-    # 如果目录已存在，先删除（直接覆盖）
+    # 增量更新：先检查仓库是否存在且完整
     if target_path.exists() and target_path.is_dir():
+        # 检查是否是 Git 仓库
+        if (target_path / ".git").exists():
+            # 检查仓库完整性
+            is_valid, error_msg = check_repo(target_path, repo_full, timeout=30)
+            if is_valid:
+                # 仓库存在且完整，跳过克隆
+                log_success(f"仓库已存在且完整，跳过克隆: {repo_full}")
+                return True
+            else:
+                # 仓库存在但不完整，需要重新克隆
+                log_info(f"仓库存在但不完整 ({error_msg})，将重新克隆: {repo_full}")
+        else:
+            # 目录存在但不是 Git 仓库，需要删除后重新克隆
+            log_info(f"目录存在但不是 Git 仓库，将删除后重新克隆: {repo_full}")
+        
+        # 删除已存在的目录（不完整或不是 Git 仓库）
         log_info(f"删除已存在的目录: {target_path}")
         try:
             shutil.rmtree(target_path)

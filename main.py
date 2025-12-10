@@ -12,13 +12,13 @@
 #   1. 解析命令行参数
 #   2. 加载配置文件
 #   3. 构建克隆任务列表
-#   4. 并行执行克隆
-#   5. 克隆完成后统一检查所有成功克隆的仓库
+#   4. 并行执行克隆（支持增量更新：先检查仓库是否存在且完整）
+#   5. 克隆完成后统一检查所有成功克隆的仓库（包括跳过克隆的）
 #   6. 输出统计报告
 #
 # 特性：
 #   - 双重并行：应用层并行（-t） + Git 层并行传输（-c）
-#   - 直接覆盖：不检查仓库是否存在，直接克隆
+#   - 增量更新：先检查仓库是否存在且完整，存在且完整则跳过克隆
 #   - 完整性检查：克隆后自动使用 git fsck 验证仓库完整性
 
 import sys
@@ -112,27 +112,10 @@ def main() -> int:
         except Exception:
             pass  # 忽略删除失败
     
-    # 根据命令执行不同逻辑
+    # 执行克隆命令（支持增量更新）
     command = args.command if hasattr(args, 'command') and args.command else 'clone'
     
-    if command == 'check':
-        # check 命令：只检查模式
-        log_info("检查模式：检查已存在的仓库")
-        success_count, fail_count, failed_tasks = check_repos_parallel(
-            tasks,
-            parallel_tasks=args.tasks,
-            timeout=30
-        )
-        
-        # 保存失败列表
-        if failed_tasks:
-            save_failed_repos(failed_tasks, FAILED_REPOS_FILE, REPO_OWNER or "qiao-925")
-        
-        # 输出统计
-        print_summary(total_repos, success_count, fail_count, start_time)
-        return 1 if fail_count > 0 else 0
-    
-    elif command == 'clone':
+    if command == 'clone':
         # clone 命令：正常克隆流程
         # 确保 connections 参数存在（向后兼容）
         connections = getattr(args, 'connections', 8)
@@ -178,6 +161,7 @@ def main() -> int:
         return 1 if fail_count > 0 else 0
     else:
         log_error(f"未知命令: {command}")
+        log_error("提示: 请使用 'repos clone' 命令")
         return 1
 
 

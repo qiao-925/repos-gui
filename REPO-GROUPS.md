@@ -28,7 +28,6 @@
 - toBeBetterJavaer
 - hippo4j
 - xxl-job
-- elasticsearch
 - elasticsearch-in-action
 - hmily
 - drools-in-action
@@ -52,11 +51,13 @@
 - get_jobs
 - geekgeekrun
 - hugo
-- mattermost
 - examples
+- linux-mint-recovery
+- doc-libs
 
 ## Daily <!-- 妙蛙种子 -->
 - Assemble
 - Inspiration
 - qiao-925
 - Resume
+- Void

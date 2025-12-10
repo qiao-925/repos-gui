@@ -32,11 +32,9 @@ def parse_args() -> argparse.Namespace:
         epilog="""
 示例:
   %(prog)s                        # 默认执行 clone 命令
-  %(prog)s clone                   # 克隆仓库
+  %(prog)s clone                   # 克隆仓库（支持增量更新）
   %(prog)s clone -t 10 -c 16      # 并行任务数 10，并行传输数 16
   %(prog)s clone -f failed-repos.txt  # 从失败列表文件重新执行失败的仓库
-  %(prog)s check                   # 检查已存在的仓库
-  %(prog)s check -f failed-repos.txt  # 检查失败列表中的仓库
 
 任务列表文件格式（REPO-GROUPS.md 格式）:
   # GitHub 仓库分组
@@ -61,14 +59,16 @@ def parse_args() -> argparse.Namespace:
     # clone 子命令
     clone_parser = subparsers.add_parser(
         'clone',
-        help='克隆仓库',
-        description='批量克隆 GitHub 仓库',
+        help='克隆仓库（支持增量更新）',
+        description='批量克隆 GitHub 仓库（支持增量更新：先检查仓库是否存在且完整）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
   %(prog)s clone                   # 使用默认参数，从 REPO-GROUPS.md 解析所有仓库
   %(prog)s clone -t 10 -c 16      # 并行任务数 10，并行传输数 16
   %(prog)s clone -f failed-repos.txt  # 从失败列表文件重新执行失败的仓库
+
+注意: clone 命令支持增量更新，会自动跳过已存在且完整的仓库。
         """
     )
     
@@ -89,36 +89,6 @@ def parse_args() -> argparse.Namespace:
     )
     
     clone_parser.add_argument(
-        '-f', '--file',
-        type=str,
-        default=None,
-        metavar='FILE',
-        help='指定任务列表文件（REPO-GROUPS.md 格式）。如果不指定，默认从 REPO-GROUPS.md 解析'
-    )
-    
-    # check 子命令
-    check_parser = subparsers.add_parser(
-        'check',
-        help='检查仓库完整性',
-        description='检查已存在的仓库完整性（使用 git fsck）',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-  %(prog)s check                   # 检查所有仓库（从 REPO-GROUPS.md 解析）
-  %(prog)s check -f failed-repos.txt  # 检查失败列表中的仓库
-  %(prog)s check -t 10            # 使用 10 个并行任务检查
-        """
-    )
-    
-    check_parser.add_argument(
-        '-t', '--tasks',
-        type=validate_positive_int,
-        default=5,
-        metavar='NUM',
-        help='并行任务数（同时检查的仓库数量，默认: 5）'
-    )
-    
-    check_parser.add_argument(
         '-f', '--file',
         type=str,
         default=None,
