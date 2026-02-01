@@ -96,6 +96,27 @@ def parse_args() -> argparse.Namespace:
         help='指定任务列表文件（REPO-GROUPS.md 格式）。如果不指定，默认从 REPO-GROUPS.md 解析'
     )
     
+    # sync 子命令
+    sync_parser = subparsers.add_parser(
+        'sync',
+        help='同步公共仓库（仅新增写入未分类）',
+        description='从 GitHub 拉取公共仓库清单，仅将新增仓库写入“未分类”分组',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  %(prog)s sync                   # 同步新增公共仓库到“未分类”
+  %(prog)s sync -f custom.md       # 使用自定义 REPO-GROUPS 文件
+        """
+    )
+
+    sync_parser.add_argument(
+        '-f', '--file',
+        type=str,
+        default=None,
+        metavar='FILE',
+        help='指定任务列表文件（REPO-GROUPS.md 格式）。如果不指定，默认使用 REPO-GROUPS.md'
+    )
+
     # 使用 parse_known_args 来检查是否有未解析的参数
     args, remaining = parser.parse_known_args()
     

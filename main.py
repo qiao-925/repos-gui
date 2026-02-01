@@ -32,6 +32,7 @@ from lib.config import parse_repo_groups, CONFIG_FILE, REPO_OWNER
 from lib.failed_repos import save_failed_repos
 from lib.logger import log_error, log_info, log_success, log_warning
 from lib.parallel import execute_parallel_clone
+from lib.sync import sync_repos
 from lib.paths import SCRIPT_DIR
 
 
@@ -88,6 +89,13 @@ def main() -> int:
     # 记录开始时间
     start_time = time.time()
     
+    # 确定命令
+    command = args.command if hasattr(args, 'command') and args.command else 'clone'
+
+    if command == 'sync':
+        config_path = args.file if hasattr(args, 'file') and args.file else CONFIG_FILE
+        return sync_repos(config_path)
+
     # 获取任务列表
     if args.file:
         # 从指定文件读取任务列表（统一用 parse_repo_groups 解析 REPO-GROUPS.md 格式）
@@ -113,7 +121,7 @@ def main() -> int:
             pass  # 忽略删除失败
     
     # 执行克隆命令（支持增量更新）
-    command = args.command if hasattr(args, 'command') and args.command else 'clone'
+    
     
     if command == 'clone':
         # clone 命令：正常克隆流程
@@ -161,7 +169,7 @@ def main() -> int:
         return 1 if fail_count > 0 else 0
     else:
         log_error(f"未知命令: {command}")
-        log_error("提示: 请使用 'repos clone' 命令")
+        log_error("提示: 请使用 'repos clone' 或 'repos sync' 命令")
         return 1
 
 
