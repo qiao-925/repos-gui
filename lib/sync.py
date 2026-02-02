@@ -16,7 +16,7 @@ from lib.logger import log_error, log_info, log_success
 from lib.paths import SCRIPT_DIR
 
 
-OWNER_PATTERN = re.compile(r'^?????:\s*(.+)$', re.MULTILINE)
+OWNER_PATTERN = re.compile(r'^仓库所有者:\s*(.+)$', re.MULTILINE)
 GROUP_HEADER_PATTERN = re.compile(r'^##\s+(.+?)(?:\s*<!--\s*(.+?)\s*-->)?\s*$')
 REPO_LINE_PATTERN = re.compile(r'^-\s+(\S+)')
 
@@ -49,7 +49,8 @@ def _write_text_preserve_encoding(
 ) -> None:
     if has_trailing_newline and not text.endswith(newline):
         text += newline
-    path.write_text(text, encoding=encoding)
+    with path.open('w', encoding=encoding, newline='') as handle:
+        handle.write(text)
 
 
 def _extract_owner(content: str) -> str:
@@ -167,8 +168,83 @@ def _add_repos_to_unclassified(
     return lines, len(to_add)
 
 
+def preview_sync(config_file: str = CONFIG_FILE) -> Tuple[bool, str, List[str], str]:
+    """预览同步：获取新增仓库列表但不写入文件。
+
+    Args:
+        config_file: REPO-GROUPS.md 路径
+
+    Returns:
+        (成功标志, owner, 新增仓库列表, 错误信息)
+    """
+    config_path = _resolve_config_path(config_file)
+    if not config_path.exists():
+        return False, "", [], f"配置文件不存在: {config_path}"
+    if not config_path.is_file():
+        return False, "", [], f"不是有效的文件: {config_path}"
+
+    try:
+        content, _, _, _ = _read_text_preserve_encoding(config_path)
+    except Exception as e:
+        return False, "", [], f"读取配置文件失败: {e}"
+
+    try:
+        owner = _extract_owner(content)
+    except ValueError as e:
+        return False, "", [], str(e)
+
+    existing_repos = set(_extract_existing_repos(content))
+
+    try:
+        remote_repos = _fetch_public_repo_names(owner)
+    except ValueError as e:
+        return False, owner, [], str(e)
+
+    new_repos = sorted([repo for repo in remote_repos if repo not in existing_repos])
+    return True, owner, new_repos, ""
+
+
+def apply_sync(config_file: str, new_repos: List[str]) -> Tuple[bool, str]:
+    """应用同步：将新增仓库写入"未分类"分组。
+
+    Args:
+        config_file: REPO-GROUPS.md 路径
+        new_repos: 新增仓库列表
+
+    Returns:
+        (成功标志, 错误信息)
+    """
+    config_path = _resolve_config_path(config_file)
+    if not config_path.exists():
+        return False, f"配置文件不存在: {config_path}"
+
+    try:
+        content, encoding, newline, has_trailing_newline = _read_text_preserve_encoding(config_path)
+    except Exception as e:
+        return False, f"读取配置文件失败: {e}"
+
+    lines = content.splitlines()
+    updated_lines, added_count = _add_repos_to_unclassified(lines, new_repos)
+    if added_count == 0:
+        return True, ""
+
+    updated_text = newline.join(updated_lines)
+    try:
+        _write_text_preserve_encoding(
+            config_path,
+            updated_text,
+            encoding,
+            newline,
+            has_trailing_newline
+        )
+    except Exception as e:
+        return False, f"写入配置文件失败: {e}"
+
+    return True, ""
+
+
 def sync_repos(config_file: str = CONFIG_FILE) -> int:
-    """同步新增仓库到“未分类”分组。
+    """同步新增仓库到"未分类"分组。
 
     Args:
         config_file: REPO-GROUPS.md 路径
@@ -229,7 +305,7 @@ def sync_repos(config_file: str = CONFIG_FILE) -> int:
         log_error(f"写入配置文件失败: {config_path} - {e}")
         return 1
 
-    log_success(f"同步完成，新增 {added_count} 个仓库已写入“未分类”")
+    log_success(f"同步完成，新增 {added_count} 个仓库已写入\"未分类\"")
     for repo in new_repos:
         log_info(f"+ {repo}")
 

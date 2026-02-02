@@ -2,3 +2,7 @@
 # 可选：Windows 颜色支持（也可以使用 ANSI 转义码）
 colorama>=0.4.6
 
+# GUI 依赖（可选）
+PyQt5>=5.15.0
+qt-material>=2.14  # Material Design 主题库
+
