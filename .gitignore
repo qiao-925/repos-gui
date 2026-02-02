@@ -16,3 +16,6 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+
+# 忽略 Claude Code 配置
+.claude/
