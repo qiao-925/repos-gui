@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-# setup.py：用于安装和注册 repos 命令
+# setup.py：用于安装 GUI 依赖（可选）
 #
 # 安装方式：
 #   pip install -e .
 #
-# 安装后可以使用：
-#   repos clone
-#   repos check
+# 启动方式：
+#   python gui.py
 
 from setuptools import setup, find_packages
 
@@ -21,21 +20,18 @@ setup(
     name="github-repos-clone",
     version="1.0.0",
     author="qiao-925",
-    description="GitHub 仓库批量分类克隆脚本",
+    description="GitHub 仓库批量分类克隆 GUI",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/qiao-925/github-repos-batch-sync-script",
-    py_modules=["main"],
+    py_modules=["gui", "main"],
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
-        "colorama>=0.4.6",  # Windows 颜色支持
+        "colorama>=0.4.6",  # Windows 颜色支持（可选）
+        "PyQt5>=5.15.0",
+        "qt-material>=2.14",
     ],
-    entry_points={
-        "console_scripts": [
-            "repos=main:main",
-        ],
-    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -49,4 +45,3 @@ setup(
         "Programming Language :: Python :: 3.12",
     ],
 )
-
