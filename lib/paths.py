@@ -6,6 +6,7 @@
 #   - 获取临时目录（跨平台兼容）
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -13,7 +14,11 @@ from typing import Optional
 
 def get_script_dir() -> Path:
     """获取脚本所在目录"""
-    # 获取当前文件的绝对路径，然后获取其父目录
+    # PyInstaller onefile：使用可执行文件所在目录
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent.resolve()
+
+    # 源码运行：使用项目根目录
     return Path(__file__).parent.parent.resolve()
 
 

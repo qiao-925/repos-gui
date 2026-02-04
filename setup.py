@@ -31,6 +31,7 @@ setup(
         "colorama>=0.4.6",  # Windows 颜色支持（可选）
         "PyQt5>=5.15.0",
         "qt-material>=2.14",
+        "keyring>=25.0",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",

@@ -9,7 +9,7 @@ import re
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from lib.config import CONFIG_FILE
 from lib.logger import log_error, log_info, log_success
@@ -72,17 +72,22 @@ def _extract_existing_repos(content: str) -> List[str]:
     return repos
 
 
-def _fetch_public_repo_names(owner: str, timeout: int = 10) -> List[str]:
+def _fetch_public_repo_names(
+    owner: str,
+    timeout: int = 10,
+    token: Optional[str] = None
+) -> List[str]:
     repos: List[str] = []
     page = 1
     per_page = 100
 
     while True:
         url = f"https://api.github.com/users/{owner}/repos?per_page={per_page}&page={page}"
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "repos-sync"}
-        )
+        headers = {"User-Agent": "repos-sync"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            headers["Accept"] = "application/vnd.github+json"
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
@@ -115,6 +120,74 @@ def _fetch_public_repo_names(owner: str, timeout: int = 10) -> List[str]:
         page += 1
 
     return repos
+
+
+def read_owner(config_file: str = CONFIG_FILE) -> Tuple[bool, str, str]:
+    """读取仓库所有者（不抛异常）。"""
+    config_path = _resolve_config_path(config_file)
+    if not config_path.exists():
+        return False, "", f"配置文件不存在: {config_path}"
+    if not config_path.is_file():
+        return False, "", f"不是有效的文件: {config_path}"
+
+    try:
+        content, _, _, _ = _read_text_preserve_encoding(config_path)
+    except Exception as e:
+        return False, "", f"读取配置文件失败: {e}"
+
+    try:
+        owner = _extract_owner(content)
+    except ValueError as e:
+        return False, "", str(e)
+    return True, owner, ""
+
+
+def write_owner(config_file: str, owner: str) -> Tuple[bool, str]:
+    """写入或更新仓库所有者（保持编码/换行）。"""
+    config_path = _resolve_config_path(config_file)
+    if not config_path.exists():
+        return False, f"配置文件不存在: {config_path}"
+    if not config_path.is_file():
+        return False, f"不是有效的文件: {config_path}"
+
+    try:
+        content, encoding, newline, has_trailing_newline = _read_text_preserve_encoding(config_path)
+    except Exception as e:
+        return False, f"读取配置文件失败: {e}"
+
+    lines = content.splitlines()
+    updated = False
+
+    for i, line in enumerate(lines):
+        if OWNER_PATTERN.match(line):
+            lines[i] = f"仓库所有者: {owner}"
+            updated = True
+            break
+
+    if not updated:
+        insert_at = 0
+        if lines:
+            insert_at = 1
+            if len(lines) > 1 and lines[1].strip() == "":
+                insert_at = 2
+        lines.insert(insert_at, f"仓库所有者: {owner}")
+        # 确保与后续内容有空行间隔
+        if insert_at + 1 < len(lines) and lines[insert_at + 1].strip() != "":
+            lines.insert(insert_at + 1, "")
+
+    updated_text = newline.join(lines)
+    try:
+        _write_text_preserve_encoding(
+            config_path,
+            updated_text,
+            encoding,
+            newline,
+            has_trailing_newline
+        )
+    except Exception as e:
+        return False, f"写入配置文件失败: {e}"
+
+    return True, ""
 
 
 def _add_repos_to_unclassified(
@@ -168,7 +241,11 @@ def _add_repos_to_unclassified(
     return lines, len(to_add)
 
 
-def preview_sync(config_file: str = CONFIG_FILE) -> Tuple[bool, str, List[str], str]:
+def preview_sync(
+    config_file: str = CONFIG_FILE,
+    owner_override: Optional[str] = None,
+    token: Optional[str] = None
+) -> Tuple[bool, str, List[str], str]:
     """预览同步：获取新增仓库列表但不写入文件。
 
     Args:
@@ -188,15 +265,22 @@ def preview_sync(config_file: str = CONFIG_FILE) -> Tuple[bool, str, List[str], 
     except Exception as e:
         return False, "", [], f"读取配置文件失败: {e}"
 
-    try:
-        owner = _extract_owner(content)
-    except ValueError as e:
-        return False, "", [], str(e)
+    owner = ""
+    if owner_override:
+        owner = owner_override.strip()
+    else:
+        try:
+            owner = _extract_owner(content)
+        except ValueError as e:
+            return False, "", [], str(e)
+
+    if not owner:
+        return False, "", [], "仓库所有者信息为空"
 
     existing_repos = set(_extract_existing_repos(content))
 
     try:
-        remote_repos = _fetch_public_repo_names(owner)
+        remote_repos = _fetch_public_repo_names(owner, token=token)
     except ValueError as e:
         return False, owner, [], str(e)
 

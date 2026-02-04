@@ -5,3 +5,6 @@ colorama>=0.4.6
 # GUI 依赖
 PyQt5>=5.15.0
 qt-material>=2.14  # Material Design 主题库
+
+# Token 存储（系统钥匙串）
+keyring>=25.0
