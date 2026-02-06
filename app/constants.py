@@ -1,9 +1,0 @@
-# UI constants
-
-from lib.paths import SCRIPT_DIR
-
-DEFAULT_TASKS = 5
-DEFAULT_CONNECTIONS = 8
-CHECK_TIMEOUT = 30
-FAILED_REPOS_FILE = SCRIPT_DIR / "failed-repos.txt"
-USE_CUSTOM_THEME = True

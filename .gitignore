@@ -17,10 +17,7 @@ __pycache__/
 build/
 dist/
 
-# 允许提交 GUI 可执行文件
-!dist/
-!dist/gh-repos-gui.exe
-!dist/gh-repos-gui
-
 # 忽略 Claude Code 配置
 .claude/
+.codex/
+.cursor

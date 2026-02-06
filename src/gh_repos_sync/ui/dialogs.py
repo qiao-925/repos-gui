@@ -10,8 +10,28 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QInputDialog
 )
 
-from lib import ai, repo_groups
-from app.workers import RepoFetchWorker, AiClassifyWorker
+from ..core import repo_config
+from ..infra import ai
+from .workers import RepoFetchWorker, AiClassifyWorker
+
+
+def _open_text_file(path: str) -> bool:
+    """Open a text file with system default app."""
+    import os
+    import subprocess
+    import sys
+
+    try:
+        if os.name == "nt":
+            os.startfile(path)  # type: ignore[attr-defined]
+            return True
+        if sys.platform == "darwin":
+            subprocess.run(["open", path], check=False)
+            return True
+        subprocess.run(["xdg-open", path], check=False)
+        return True
+    except Exception:
+        return False
 
 class ClassifyDialog(QDialog):
     """仓库分类面板"""
@@ -23,7 +43,7 @@ class ClassifyDialog(QDialog):
         self.config_file = config_file
         self.repos: List[Dict[str, object]] = []
         self.repo_groups: Dict[str, str] = {}
-        self.groups, self.group_tags = repo_groups.load_groups_from_file(config_file)
+        self.groups, self.group_tags = repo_config.load_groups_from_file(config_file)
         if not self.groups:
             self.groups = ["Go-Practice", "Java-Practice", "AI-Practice", "Tools", "Daily", "未分类"]
         if "未分类" not in self.groups:
@@ -66,6 +86,10 @@ class ClassifyDialog(QDialog):
         self.ai_settings_btn = QPushButton("AI 设置")
         self.ai_settings_btn.clicked.connect(self.configure_ai)
         btn_layout.addWidget(self.ai_settings_btn)
+
+        self.ai_prompt_btn = QPushButton("编辑 AI Prompt")
+        self.ai_prompt_btn.clicked.connect(self.open_ai_prompt)
+        btn_layout.addWidget(self.ai_prompt_btn)
 
         self.save_btn = QPushButton("写入分类文件")
         self.save_btn.clicked.connect(self.save_repo_groups)
@@ -247,6 +271,18 @@ class ClassifyDialog(QDialog):
         ai.save_ai_config(self.ai_base_url, self.ai_model)
         self.set_status("状态：AI 配置已更新")
 
+    def open_ai_prompt(self):
+        prompt_path = ai.get_classify_prompt_path()
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        if not prompt_path.exists():
+            ai.build_classify_system_prompt(self.groups)
+
+        opened = _open_text_file(str(prompt_path))
+        if not opened:
+            QMessageBox.information(self, "提示", f"请手动打开：\n{prompt_path}")
+            return
+        self.set_status("状态：已打开 AI Prompt 文件")
+
     def ai_classify(self):
         if not self.repos:
             QMessageBox.information(self, "提示", "请先拉取仓库列表")
@@ -308,7 +344,7 @@ class ClassifyDialog(QDialog):
                 return
             owner = owner.strip()
 
-        ok, error = repo_groups.write_repo_groups(
+        ok, error = repo_config.write_repo_groups(
             self.config_file,
             owner,
             self.groups,

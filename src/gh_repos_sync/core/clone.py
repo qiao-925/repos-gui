@@ -16,8 +16,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from lib.check import check_repo
-from lib.logger import log_error, log_info, log_success
+from .check import check_repo
+from ..infra.logger import log_error, log_info, log_success
 
 
 def get_repo_url(repo_full: str) -> str:

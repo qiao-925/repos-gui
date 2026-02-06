@@ -7,8 +7,8 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Tuple
 
-from lib.clone import clone_repo
-from lib.logger import log_error, log_info, log_success, log_warning
+from .clone import clone_repo
+from ..infra.logger import log_error, log_info, log_success, log_warning
 
 
 def execute_parallel_clone(

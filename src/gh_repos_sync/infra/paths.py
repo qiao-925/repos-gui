@@ -19,7 +19,7 @@ def get_script_dir() -> Path:
         return Path(sys.executable).parent.resolve()
 
     # 源码运行：使用项目根目录
-    return Path(__file__).parent.parent.resolve()
+    return Path(__file__).resolve().parents[3]
 
 
 def get_repos_dir() -> Path:

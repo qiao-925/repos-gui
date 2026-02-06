@@ -1,19 +1,15 @@
 # GUI workers (threaded tasks)
 
-import time
 from typing import Dict, List
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from lib import config, github_api, repo_groups
-from lib.check import check_repos_parallel
-from lib.failed_repos import save_failed_repos
-from lib.logger import get_log_state, set_log_callback
-from lib.parallel import execute_parallel_clone
-from lib.sync import apply_sync, preview_sync
-from lib.config import parse_repo_groups
-from lib import ai
-from app.constants import CHECK_TIMEOUT, FAILED_REPOS_FILE
+from ..application.ai_generation import generate_repo_groups_with_ai
+from ..application.execution import run_check_only, run_clone_and_check
+from ..core.repo_config import apply_sync, preview_sync
+from ..infra import ai, auth
+from ..infra.github_api import fetch_public_repos
+from ..infra.logger import get_log_state, set_log_callback
 
 class SyncWorker(QThread):
     """同步预览工作线程"""
@@ -114,7 +110,7 @@ class RepoFetchWorker(QThread):
         self.token = token
 
     def run(self):
-        success, repos, error = github_api.fetch_public_repos(self.owner, token=self.token or None)
+        success, repos, error = fetch_public_repos(self.owner, token=self.token or None)
         self.finished.emit(success, repos, error)
 
 
@@ -176,49 +172,21 @@ class AiGenerateWorker(QThread):
         self.model = model
 
     def run(self):
-        success, repos, error = github_api.fetch_public_repos(self.owner, token=self.token or None)
-        if not success:
-            self.finished.emit(False, 0, error)
-            return
-
         def _progress(done: int, total: int) -> None:
             self.progress.emit(done, total)
 
-        mapping, error = ai.classify_repos(
-            repos,
-            [],
-            self.api_key,
-            base_url=self.base_url,
-            model=self.model,
-            progress_cb=_progress
-        )
-        if error:
-            self.finished.emit(False, 0, error)
-            return
-
-        assignments: Dict[str, str] = {}
-        for repo in repos:
-            name = str(repo.get("name", "")).strip()
-            if not name:
-                continue
-            group = mapping.get(name, "").strip() or "未分类"
-            assignments[name] = group
-
-        groups = sorted({group for group in assignments.values() if group})
-
-        ok, error = repo_groups.write_repo_groups(
-            self.config_file,
+        success, total, error = generate_repo_groups_with_ai(
             self.owner,
-            groups,
-            assignments,
+            self.token,
+            self.config_file,
+            self.groups,
             self.tags,
-            keep_empty=True
+            self.api_key,
+            self.base_url,
+            self.model,
+            progress_cb=_progress,
         )
-        if not ok:
-            self.finished.emit(False, 0, error)
-            return
-
-        self.finished.emit(True, len(repos), "")
+        self.finished.emit(success, total, error)
 
 
 
@@ -241,59 +209,12 @@ class CloneWorker(QThread):
         set_log_callback(self._log_callback, log_to_stdout=False, log_to_stderr=False)
 
         try:
-            start_time = time.time()
-            tasks = parse_repo_groups(self.config_file)
-            if not tasks:
-                raise ValueError("未找到任何仓库任务")
-
-            total_repos = len(tasks)
-
-            if FAILED_REPOS_FILE.exists():
-                try:
-                    FAILED_REPOS_FILE.unlink()
-                except Exception:
-                    pass
-
-            success_count, fail_count, failed_tasks = execute_parallel_clone(
-                tasks,
-                self.tasks,
-                self.connections
+            success, result, error = run_clone_and_check(
+                self.config_file,
+                tasks=self.tasks,
+                connections=self.connections,
             )
-
-            if success_count > 0:
-                successful_tasks = [task for task in tasks if task not in failed_tasks]
-                check_success, check_fail, check_failed_tasks = check_repos_parallel(
-                    successful_tasks,
-                    parallel_tasks=self.tasks,
-                    timeout=CHECK_TIMEOUT
-                )
-
-                if check_failed_tasks:
-                    failed_tasks.extend(check_failed_tasks)
-                    fail_count += len(check_failed_tasks)
-                    success_count -= len(check_failed_tasks)
-
-            if failed_tasks:
-                save_failed_repos(
-                    failed_tasks,
-                    FAILED_REPOS_FILE,
-                    config.REPO_OWNER or "qiao-925"
-                )
-
-            duration = int(time.time() - start_time)
-            result = {
-                "total": total_repos,
-                "success": success_count,
-                "fail": fail_count,
-                "duration": duration,
-                "failed_file": str(FAILED_REPOS_FILE) if failed_tasks else ""
-            }
-            self.finished.emit(True, result, "")
-
-        except SystemExit:
-            self.finished.emit(False, {}, "配置文件解析失败")
-        except Exception as e:
-            self.finished.emit(False, {}, str(e))
+            self.finished.emit(success, result, error)
         finally:
             set_log_callback(prev_callback, log_to_stdout=prev_stdout, log_to_stderr=prev_stderr)
 
@@ -316,40 +237,11 @@ class CheckWorker(QThread):
         set_log_callback(self._log_callback, log_to_stdout=False, log_to_stderr=False)
 
         try:
-            start_time = time.time()
-            tasks = parse_repo_groups(self.config_file)
-            if not tasks:
-                raise ValueError("未找到任何仓库任务")
-
-            total_repos = len(tasks)
-
-            success_count, fail_count, failed_tasks = check_repos_parallel(
-                tasks,
-                parallel_tasks=self.tasks,
-                timeout=CHECK_TIMEOUT
+            success, result, error = run_check_only(
+                self.config_file,
+                tasks=self.tasks,
             )
-
-            if failed_tasks:
-                save_failed_repos(
-                    failed_tasks,
-                    FAILED_REPOS_FILE,
-                    config.REPO_OWNER or "qiao-925"
-                )
-
-            duration = int(time.time() - start_time)
-            result = {
-                "total": total_repos,
-                "success": success_count,
-                "fail": fail_count,
-                "duration": duration,
-                "failed_file": str(FAILED_REPOS_FILE) if failed_tasks else ""
-            }
-            self.finished.emit(True, result, "")
-
-        except SystemExit:
-            self.finished.emit(False, {}, "配置文件解析失败")
-        except Exception as e:
-            self.finished.emit(False, {}, str(e))
+            self.finished.emit(success, result, error)
         finally:
             set_log_callback(prev_callback, log_to_stdout=prev_stdout, log_to_stderr=prev_stderr)
 

@@ -3,7 +3,7 @@
 
 a = Analysis(
     ['gui.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=[],
     datas=[],
     hiddenimports=[],

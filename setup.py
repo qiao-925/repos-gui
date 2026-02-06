@@ -25,7 +25,8 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/qiao-925/github-repos-batch-sync-script",
     py_modules=["gui", "main"],
-    packages=find_packages(),
+    packages=find_packages("src"),
+    package_dir={"": "src"},
     python_requires=">=3.7",
     install_requires=[
         "colorama>=0.4.6",  # Windows 颜色支持（可选）

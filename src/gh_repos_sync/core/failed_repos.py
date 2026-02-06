@@ -4,11 +4,12 @@
 #   - save_failed_repos()：保存失败的仓库列表为 REPO-GROUPS.md 格式
 
 import re
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
-from lib.logger import log_info, log_warning
+from ..domain.models import RepoTask
+from ..domain.repo_groups import build_failed_repo_groups_text
+from ..infra.logger import log_info, log_warning
 
 
 def extract_highland_from_folder(group_folder: str) -> str:
@@ -52,51 +53,27 @@ def save_failed_repos(
                 pass  # 忽略删除失败
         return
     
-    # 按分组组织失败的仓库
-    group_repos: Dict[str, List[str]] = defaultdict(list)  # {group_name: [repo_name, ...]}
-    group_highlands: Dict[str, str] = {}  # {group_name: highland}
-    
+    normalized_tasks: List[RepoTask] = []
     for task in failed_tasks:
-        group_name = task['group_name']
-        repo_name = task['repo_name']
-        
-        # 优先使用任务中的 highland，否则从 group_folder 中提取
         highland = task.get('highland', '')
         if not highland:
             highland = extract_highland_from_folder(task['group_folder'])
-        
-        group_repos[group_name].append(repo_name)
-        if group_name not in group_highlands:
-            group_highlands[group_name] = highland
-    
-    # 生成文件内容
-    lines = [
-        "# GitHub 仓库分组",
-        "",
-        f"仓库所有者: {repo_owner}",
-        ""
-    ]
-    
-    # 按分组名排序输出
-    for group_name in sorted(group_repos.keys()):
-        highland = group_highlands.get(group_name, '')
-        repos = group_repos[group_name]
-        
-        # 输出分组标题
-        if highland:
-            lines.append(f"## {group_name} <!-- {highland} -->")
-        else:
-            lines.append(f"## {group_name}")
-        
-        # 输出仓库列表
-        for repo in repos:
-            if repo:  # 确保仓库名不为空
-                lines.append(f"- {repo}")
-        lines.append("")
+
+        normalized_tasks.append(
+            RepoTask(
+                repo_full=task['repo_full'],
+                repo_name=task['repo_name'],
+                group_folder=task['group_folder'],
+                group_name=task['group_name'],
+                highland=highland,
+            )
+        )
+
+    content = build_failed_repo_groups_text(normalized_tasks, repo_owner)
     
     # 写入文件
     try:
-        failed_repos_file.write_text('\n'.join(lines), encoding='utf-8')
+        failed_repos_file.write_text(content, encoding='utf-8')
         
         log_warning(f"有 {len(failed_tasks)} 个仓库克隆失败")
         log_info(f"失败列表已保存到: {failed_repos_file}（REPO-GROUPS.md 格式）")

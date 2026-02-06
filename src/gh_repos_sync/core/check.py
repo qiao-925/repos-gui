@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from lib.logger import log_error, log_info, log_success, log_warning
+from ..infra.logger import log_error, log_info, log_success, log_warning
 
 
 def check_repo(repo_path: Path, repo_full: str, timeout: int = 30) -> Tuple[bool, Optional[str]]:

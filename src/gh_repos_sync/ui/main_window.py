@@ -1,18 +1,24 @@
 # Main window UI
 
-import ctypes
 import os
+import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt5.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QListWidget, QProgressBar,
-    QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget, QMessageBox, QFormLayout
+    QApplication, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel,
+    QLineEdit, QListWidget, QMainWindow, QMessageBox, QProgressBar,
+    QPushButton, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 )
+
+if hasattr(Qt, "AA_EnableHighDpiScaling"):
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+if hasattr(Qt, "AA_UseHighDpiPixmaps"):
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
 try:
     from qt_material import apply_stylesheet
@@ -20,13 +26,22 @@ try:
 except Exception:
     HAS_QT_MATERIAL = False
 
-from lib import auth, config, repo_groups
-from lib.paths import SCRIPT_DIR
-from lib.config import CONFIG_FILE
-from app.constants import DEFAULT_CONNECTIONS, DEFAULT_TASKS, FAILED_REPOS_FILE, USE_CUSTOM_THEME
-from app.workers import (
-    ApplyWorker, AuthWorker, CheckWorker, CloneWorker, ProfileWorker, SyncWorker
+from ..core import repo_config
+from ..core.repo_config import read_owner, write_owner
+from ..infra import ai, auth
+from .chrome import apply_windows_dark_titlebar, build_app_icon, make_section_header
+from .theme import CUSTOM_STYLESHEET
+from .workers import (
+    AiGenerateWorker, ApplyWorker, AuthWorker, CheckWorker, CloneWorker,
+    ProfileWorker, SyncWorker
 )
+
+DEFAULT_TASKS = 5
+DEFAULT_CONNECTIONS = 8
+USE_CUSTOM_THEME = True
+CONFIG_PATH = repo_config.SCRIPT_DIR / repo_config.CONFIG_FILE
+FAILED_REPOS_FILE = repo_config.SCRIPT_DIR / "failed-repos.txt"
+BACKUP_FILE_PREFIX = "REPO-GROUPS.backup"
 
 class MainWindow(QMainWindow):
     """主窗口"""
@@ -34,7 +49,7 @@ class MainWindow(QMainWindow):
     def __init__(self, app):
         super().__init__()
         self.app = app
-        self.config_file = str(SCRIPT_DIR / CONFIG_FILE)
+        self.config_file = str(CONFIG_PATH)
         self.new_repos: List[str] = []
         self.sync_worker = None
         self.apply_worker = None
@@ -62,116 +77,11 @@ class MainWindow(QMainWindow):
             self.apply_custom_theme()
 
     def apply_custom_theme(self):
-        self.app.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-                color: #e6e6e6;
-                font-family: "Segoe UI";
-                font-size: 10pt;
-            }
-            QLabel#section-title {
-                color: #f0f0f0;
-                font-size: 12pt;
-                font-weight: bold;
-            }
-            QLabel#section-subtitle {
-                color: #bdbdbd;
-                font-size: 9pt;
-            }
-            QLineEdit, QTextEdit, QListWidget, QSpinBox {
-                background-color: #242424;
-                border: 1px solid #3a3a3a;
-                border-radius: 6px;
-                padding: 6px;
-                selection-background-color: #3d5a80;
-            }
-            QPushButton {
-                background-color: #2c2c2c;
-                border: 1px solid #3a3a3a;
-                border-radius: 6px;
-                padding: 10px 18px;
-                min-height: 34px;
-                font-size: 10.5pt;
-            }
-            QPushButton:hover {
-                background-color: #333333;
-            }
-            QPushButton:disabled {
-                background-color: #2a2a2a;
-                color: #777;
-            }
-            QProgressBar {
-                border: 1px solid #3a3a3a;
-                border-radius: 6px;
-                text-align: center;
-                background-color: #242424;
-            }
-            QProgressBar::chunk {
-                background-color: #4d7c8a;
-                border-radius: 6px;
-            }
-            QFrame#divider {
-                background-color: #3a3a3a;
-                max-height: 1px;
-                min-height: 1px;
-            }
-        """)
-
-    def _build_app_icon(self) -> QIcon:
-        icon_size = 64
-        pixmap = QPixmap(icon_size, icon_size)
-        pixmap.fill(QColor("#1e1e1e"))
-
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(QColor("#4d7c8a"))
-        painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(6, 6, 52, 52, 10, 10)
-
-        painter.setPen(QColor("#f0f0f0"))
-        font = QFont("Segoe UI", 18, QFont.Bold)
-        painter.setFont(font)
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "GH")
-        painter.end()
-
-        return QIcon(pixmap)
-
-    def _apply_windows_dark_titlebar(self) -> None:
-        if sys.platform != "win32":
-            return
-        try:
-            hwnd = int(self.winId())
-            dark_mode = ctypes.c_int(1)
-            DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-            result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_USE_IMMERSIVE_DARK_MODE,
-                ctypes.byref(dark_mode),
-                ctypes.sizeof(dark_mode)
-            )
-            if result != 0:
-                DWMWA_USE_IMMERSIVE_DARK_MODE = 19
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd,
-                    DWMWA_USE_IMMERSIVE_DARK_MODE,
-                    ctypes.byref(dark_mode),
-                    ctypes.sizeof(dark_mode)
-                )
-        except Exception:
-            pass
+        self.app.setStyleSheet(CUSTOM_STYLESHEET)
 
     @staticmethod
     def _make_section_header(title: str) -> QHBoxLayout:
-        layout = QHBoxLayout()
-        label = QLabel(title)
-        label.setObjectName("section-title")
-        layout.addWidget(label)
-
-        line = QFrame()
-        line.setObjectName("divider")
-        line.setFrameShape(QFrame.HLine)
-        layout.addWidget(line, 1)
-        return layout
+        return make_section_header(title)
 
     def _ensure_repo_groups_file(self) -> bool:
         path = Path(self.config_file)
@@ -181,7 +91,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "错误", f"不是有效的文件: {path}")
             return False
 
-        ok, error = repo_groups.ensure_repo_groups_file(
+        ok, error = repo_config.ensure_repo_groups_file(
             self.config_file,
             owner=self.login_name or "",
             keep_empty=True
@@ -198,14 +108,14 @@ class MainWindow(QMainWindow):
         """初始化界面"""
         self.setWindowTitle("GitHub 仓库管理工具")
         self.setMinimumSize(920, 820)
-        self.setWindowIcon(self._build_app_icon())
-        self._apply_windows_dark_titlebar()
+        self.setWindowIcon(build_app_icon())
+        apply_windows_dark_titlebar(self)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(14)
+        main_layout.setSpacing(10)
         main_layout.setContentsMargins(24, 24, 24, 24)
         central_widget.setLayout(main_layout)
 
@@ -237,17 +147,17 @@ class MainWindow(QMainWindow):
 
         self.refresh_btn = QPushButton("刷新信息")
         self.refresh_btn.clicked.connect(self.refresh_profile)
-        self.refresh_btn.setFixedWidth(100)
+        self.refresh_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         auth_layout.addWidget(self.refresh_btn)
 
         self.login_btn = QPushButton("登录 GitHub")
         self.login_btn.clicked.connect(self.start_login)
-        self.login_btn.setFixedWidth(110)
+        self.login_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         auth_layout.addWidget(self.login_btn)
 
         self.logout_btn = QPushButton("退出登录")
         self.logout_btn.clicked.connect(self.logout)
-        self.logout_btn.setFixedWidth(100)
+        self.logout_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         auth_layout.addWidget(self.logout_btn)
 
         main_layout.addLayout(auth_layout)
@@ -256,7 +166,7 @@ class MainWindow(QMainWindow):
         self.repo_count_label.setStyleSheet("font-size: 10pt;")
         main_layout.addWidget(self.repo_count_label)
 
-        self.flow_hint_label = QLabel("流程：1 登录  2 分类（AI/手动）  3 同步预览  4 写入未分类  5 克隆/检查")
+        self.flow_hint_label = QLabel("流程：1 登录  2 分类（AI全量/增量 + 手动微调）  3 开始克隆")
         self.flow_hint_label.setStyleSheet("font-size: 9pt; color: #b0b0b0;")
         main_layout.addWidget(self.flow_hint_label)
 
@@ -264,18 +174,40 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(self._make_section_header("分类"))
         classify_layout = QHBoxLayout()
         classify_layout.setSpacing(10)
-        self.ai_generate_btn = QPushButton("AI 自动分类")
+
+        self.ai_generate_btn = QPushButton("AI 自动分类（全量重建）")
         self.ai_generate_btn.clicked.connect(self.start_ai_generate)
-        self.ai_generate_btn.setFixedWidth(120)
-        classify_layout.addWidget(self.ai_generate_btn)
+        self.ai_generate_btn.setMinimumHeight(34)
+        self.ai_generate_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.ai_generate_btn.setCursor(Qt.PointingHandCursor)
+        classify_layout.addWidget(self.ai_generate_btn, 1)
 
-        self.open_file_btn = QPushButton("手动编辑分类文件")
+        self.incremental_btn = QPushButton("增量更新到未分类（推荐）")
+        self.incremental_btn.clicked.connect(self.start_incremental_update)
+        self.incremental_btn.setMinimumHeight(34)
+        self.incremental_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.incremental_btn.setCursor(Qt.PointingHandCursor)
+        classify_layout.addWidget(self.incremental_btn, 1)
+
+        self.open_file_btn = QPushButton("手动编辑")
         self.open_file_btn.clicked.connect(self.open_repo_groups_file)
-        self.open_file_btn.setFixedWidth(120)
-        classify_layout.addWidget(self.open_file_btn)
+        self.open_file_btn.setMinimumHeight(34)
+        self.open_file_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.open_file_btn.setCursor(Qt.PointingHandCursor)
+        classify_layout.addWidget(self.open_file_btn, 1)
 
-        classify_layout.addStretch(1)
+        self.open_prompt_btn = QPushButton("编辑 AI Prompt")
+        self.open_prompt_btn.clicked.connect(self.open_ai_prompt_file)
+        self.open_prompt_btn.setMinimumHeight(34)
+        self.open_prompt_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.open_prompt_btn.setCursor(Qt.PointingHandCursor)
+        classify_layout.addWidget(self.open_prompt_btn, 1)
+
         main_layout.addLayout(classify_layout)
+
+        classify_hint = QLabel("说明：AI 自动分类会重建分组；日常维护建议使用增量更新，再手动微调。")
+        classify_hint.setStyleSheet("font-size: 9pt; color: #9a9a9a;")
+        main_layout.addWidget(classify_hint)
 
         self.owner_label = QLabel("仓库所有者：未检测")
         self.owner_label.setStyleSheet("font-size: 10pt;")
@@ -307,38 +239,28 @@ class MainWindow(QMainWindow):
         reset_params_layout.addStretch(1)
         self.reset_params_btn = QPushButton("恢复默认参数")
         self.reset_params_btn.clicked.connect(self.reset_params)
-        self.reset_params_btn.setFixedWidth(160)
+        self.reset_params_btn.setMinimumHeight(30)
         reset_params_layout.addWidget(self.reset_params_btn)
         main_layout.addLayout(reset_params_layout)
 
-        # 操作按钮
-        main_layout.addLayout(self._make_section_header("执行操作"))
+        # 执行
+        main_layout.addLayout(self._make_section_header("执行"))
 
         actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(16)
-
-        self.preview_btn = QPushButton("同步预览")
-        self.preview_btn.clicked.connect(self.preview_sync)
-        self.preview_btn.setCursor(Qt.PointingHandCursor)
-        actions_layout.addWidget(self.preview_btn)
-
-        self.apply_btn = QPushButton("写入未分类")
-        self.apply_btn.clicked.connect(self.apply_sync)
-        self.apply_btn.setEnabled(False)
-        self.apply_btn.setCursor(Qt.PointingHandCursor)
-        actions_layout.addWidget(self.apply_btn)
+        actions_layout.setSpacing(10)
 
         self.clone_btn = QPushButton("开始克隆")
         self.clone_btn.clicked.connect(self.start_clone)
+        self.clone_btn.setMinimumHeight(36)
+        self.clone_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.clone_btn.setCursor(Qt.PointingHandCursor)
-        actions_layout.addWidget(self.clone_btn)
-
-        self.check_btn = QPushButton("仅检查")
-        self.check_btn.clicked.connect(self.start_check)
-        self.check_btn.setCursor(Qt.PointingHandCursor)
-        actions_layout.addWidget(self.check_btn)
+        actions_layout.addWidget(self.clone_btn, 1)
 
         main_layout.addLayout(actions_layout)
+
+        run_hint = QLabel("说明：开始克隆会直接按当前 REPO-GROUPS.md 执行，无需先做增量更新。")
+        run_hint.setStyleSheet("font-size: 9pt; color: #9a9a9a;")
+        main_layout.addWidget(run_hint)
 
         failed_label = QLabel(f"失败列表：{FAILED_REPOS_FILE}（自动生成，可直接选择重试）")
         failed_label.setStyleSheet("font-size: 9pt; color: #aaa;")
@@ -354,8 +276,8 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("font-size: 10pt; color: #bdbdbd;")
         main_layout.addWidget(self.status_label)
 
-        # 新增仓库列表
-        main_layout.addLayout(self._make_section_header("新增仓库列表"))
+        # 增量更新结果
+        main_layout.addLayout(self._make_section_header("增量更新结果"))
 
         self.repo_list = QListWidget()
         self.repo_list.setMinimumHeight(160)
@@ -370,20 +292,20 @@ class MainWindow(QMainWindow):
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(160)
+        self.log_text.setMinimumHeight(220)
+        self.log_text.setMaximumHeight(320)
         main_layout.addWidget(self.log_text)
 
     def set_busy(self, busy: bool, status: str = ""):
         self.reset_params_btn.setEnabled(not busy)
-        self.preview_btn.setEnabled(not busy)
         self.clone_btn.setEnabled(not busy)
-        self.check_btn.setEnabled(not busy)
         self.login_btn.setEnabled(not busy)
         self.refresh_btn.setEnabled(not busy and bool(self.token))
         self.logout_btn.setEnabled(not busy and bool(self.token))
         self.ai_generate_btn.setEnabled(not busy)
+        self.incremental_btn.setEnabled(not busy and bool(self.token))
         self.open_file_btn.setEnabled(not busy)
-        self.apply_btn.setEnabled(not busy and bool(self.new_repos))
+        self.open_prompt_btn.setEnabled(not busy)
         self.progress_bar.setVisible(busy)
         if status:
             self.status_label.setText(status)
@@ -403,15 +325,17 @@ class MainWindow(QMainWindow):
                 self.repo_count_label.setText(f"仓库统计：{self.public_repo_count} 个公共仓库")
             else:
                 self.repo_count_label.setText("仓库统计：未获取")
-            self._set_flow_hint("下一步：分类（拉取仓库）或同步预览")
+            self._set_flow_hint("下一步：分类（AI全量/增量）并手动微调，然后开始克隆")
         else:
             self.auth_status_label.setText("登录状态：未登录")
             self.logout_btn.setEnabled(False)
             self.login_btn.setText("登录 GitHub")
             self.repo_count_label.setText("仓库统计：未获取")
-            self._set_flow_hint("流程：1 登录  2 分类（AI/手动）  3 同步预览  4 写入未分类  5 克隆/检查")
+            self._set_flow_hint("流程：1 登录  2 分类（AI全量/增量 + 手动微调）  3 开始克隆")
         if hasattr(self, "refresh_btn"):
             self.refresh_btn.setEnabled(bool(self.token))
+        if hasattr(self, "incremental_btn"):
+            self.incremental_btn.setEnabled(bool(self.token))
 
     def _set_flow_hint(self, text: str) -> None:
         if hasattr(self, "flow_hint_label"):
@@ -547,6 +471,47 @@ class MainWindow(QMainWindow):
         except Exception:
             QMessageBox.information(self, "提示", f"请手动打开文件：{path}")
 
+    def open_ai_prompt_file(self):
+        prompt_path = ai.get_classify_prompt_path()
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        if not prompt_path.exists():
+            ai.build_classify_system_prompt([])
+
+        try:
+            if sys.platform == "win32":
+                os.startfile(str(prompt_path))  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(prompt_path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(prompt_path)], check=False)
+        except Exception:
+            QMessageBox.information(self, "提示", f"请手动打开文件：{prompt_path}")
+
+    def _has_existing_classification(self) -> bool:
+        config_path = Path(self.config_file)
+        if not config_path.exists() or not config_path.is_file():
+            return False
+
+        try:
+            content, _, _, _ = repo_config.read_text_preserve_encoding(config_path)
+        except Exception:
+            return False
+
+        for line in content.splitlines():
+            if line.lstrip().startswith("- "):
+                return True
+        return False
+
+    def _backup_repo_groups_file(self) -> Tuple[Path, str]:
+        source = Path(self.config_file)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = source.parent / f"{BACKUP_FILE_PREFIX}-{timestamp}.md"
+        try:
+            shutil.copy2(source, backup)
+            return backup, ""
+        except Exception as exc:
+            return backup, str(exc)
+
     def start_ai_generate(self):
         if not self.token:
             QMessageBox.information(self, "提示", "请先登录 GitHub")
@@ -565,6 +530,33 @@ class MainWindow(QMainWindow):
                 return
             owner = owner.strip()
 
+        if self._has_existing_classification():
+            overwrite_reply = QMessageBox.question(
+                self,
+                "⚠️ 全量覆盖确认",
+                "检测到 REPO-GROUPS.md 已存在分类内容。\n"
+                "继续将执行全量重建，并覆盖现有分类结果。\n\n"
+                "是否继续？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if overwrite_reply != QMessageBox.Yes:
+                return
+
+            backup_path, backup_error = self._backup_repo_groups_file()
+            if backup_error:
+                continue_reply = QMessageBox.question(
+                    self,
+                    "备份失败",
+                    f"自动备份失败：{backup_error}\n\n是否仍继续覆盖？",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if continue_reply != QMessageBox.Yes:
+                    return
+            else:
+                self.log(f"🗂️ 已备份现有分类文件：{backup_path}")
+
         api_key, _ = ai.load_api_key()
         if not api_key:
             api_key, ok = QInputDialog.getText(
@@ -578,7 +570,7 @@ class MainWindow(QMainWindow):
             ai.save_api_key(api_key.strip())
             api_key = api_key.strip()
 
-        groups, tags = repo_groups.load_groups_from_file(self.config_file)
+        groups, tags = repo_config.load_groups_from_file(self.config_file)
 
         base_url, model = ai.load_ai_config()
 
@@ -612,7 +604,7 @@ class MainWindow(QMainWindow):
         self.log(f"✅ AI 分类完成，共 {total} 个仓库")
         QMessageBox.information(self, "完成", "AI 分类已写入 REPO-GROUPS.md，可直接手动微调")
         self._refresh_owner_label()
-        self._set_flow_hint("下一步：手动微调分类文件或继续同步")
+        self._set_flow_hint("下一步：手动微调分类文件，然后开始克隆")
         self.open_repo_groups_file()
 
     def _resolve_owner_for_sync(self) -> str:
@@ -669,15 +661,19 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "写入失败", write_error)
         return self.login_name
 
-    def preview_sync(self):
+    def start_incremental_update(self):
+        if not self.token:
+            QMessageBox.information(self, "提示", "请先登录 GitHub")
+            return
         if not self._ensure_repo_groups_file():
             return
 
-        self.set_busy(True, "状态：同步预览中...")
+        self.set_busy(True, "状态：增量更新中（拉取新增仓库）...")
         self.repo_list.clear()
         self.new_repos = []
+        self.stats_label.setText("新增仓库数: 0")
 
-        self.log("🔄 开始同步预览...")
+        self.log("🔄 开始增量更新：拉取新增仓库...")
 
         owner_override = self._resolve_owner_for_sync()
 
@@ -686,14 +682,14 @@ class MainWindow(QMainWindow):
             owner_override=owner_override,
             token=self.token or ""
         )
-        self.sync_worker.finished.connect(self.on_preview_finished)
+        self.sync_worker.finished.connect(self.on_incremental_preview_finished)
         self.sync_worker.start()
 
-    def on_preview_finished(self, success: bool, owner: str, new_repos: List[str], error: str):
+    def on_incremental_preview_finished(self, success: bool, owner: str, new_repos: List[str], error: str):
         self.set_busy(False, "状态：就绪")
 
         if not success:
-            QMessageBox.critical(self, "❌ 错误", f"同步预览失败:\n{error}")
+            QMessageBox.critical(self, "❌ 错误", f"增量更新失败:\n{error}")
             self.log(f"❌ 错误: {error}")
             return
 
@@ -703,59 +699,34 @@ class MainWindow(QMainWindow):
         if new_repos:
             self.repo_list.addItems(new_repos)
             self.stats_label.setText(f"新增仓库数: {len(new_repos)}")
-            self.apply_btn.setEnabled(True)
-            self.log(f"✅ 发现 {len(new_repos)} 个新增仓库")
-            self._set_flow_hint("下一步：写入未分类")
+            self.log(f"✅ 发现 {len(new_repos)} 个新增仓库，准备写入“未分类”")
+            self.set_busy(True, "状态：增量更新中（写入未分类）...")
+            self.apply_worker = ApplyWorker(self.config_file, self.new_repos)
+            self.apply_worker.finished.connect(self.on_incremental_apply_finished)
+            self.apply_worker.start()
         else:
             self.stats_label.setText("新增仓库数: 0")
             self.log("ℹ️ 没有新增仓库，REPO-GROUPS.md 已是最新")
             QMessageBox.information(self, "ℹ️ 提示", "没有新增仓库，REPO-GROUPS.md 已是最新")
-            self._set_flow_hint("下一步：开始克隆或仅检查")
+            self._set_flow_hint("下一步：可直接开始克隆")
 
-    def apply_sync(self):
-        if not self.new_repos:
-            QMessageBox.warning(self, "⚠️ 警告", "没有新增仓库需要写入")
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "❓ 确认",
-            f"确定要将 {len(self.new_repos)} 个新增仓库写入\"未分类\"分组吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply != QMessageBox.Yes:
-            return
-
-        self.set_busy(True, "状态：写入未分类中...")
-        self.log("💾 开始写入未分类...")
-
-        self.apply_worker = ApplyWorker(self.config_file, self.new_repos)
-        self.apply_worker.finished.connect(self.on_apply_finished)
-        self.apply_worker.start()
-
-    def on_apply_finished(self, success: bool, error: str):
+    def on_incremental_apply_finished(self, success: bool, error: str):
         self.set_busy(False, "状态：就绪")
 
         if not success:
-            QMessageBox.critical(self, "❌ 错误", f"写入失败:\n{error}")
+            QMessageBox.critical(self, "❌ 错误", f"写入未分类失败:\n{error}")
             self.log(f"❌ 错误: {error}")
-            self.apply_btn.setEnabled(True)
             return
 
         QMessageBox.information(
             self,
             "✅ 成功",
-            f"成功写入 {len(self.new_repos)} 个仓库到\"未分类\"分组"
+            f"增量更新完成：已写入 {len(self.new_repos)} 个仓库到\"未分类\"分组。\n"
+            "建议先手动微调分类，再开始克隆。"
         )
-        self.log(f"✅ 成功写入 {len(self.new_repos)} 个仓库")
-
-        self.repo_list.clear()
-        self.new_repos = []
-        self.stats_label.setText("新增仓库数: 0")
-        self.apply_btn.setEnabled(False)
-        self._set_flow_hint("下一步：开始克隆或仅检查")
+        self.log(f"✅ 增量更新完成，成功写入 {len(self.new_repos)} 个仓库")
+        self._set_flow_hint("下一步：手动微调分类文件，然后开始克隆")
+        self.open_repo_groups_file()
 
     def start_clone(self):
         if not self._ensure_repo_groups_file():
@@ -836,8 +807,8 @@ class MainWindow(QMainWindow):
         return f"{prefix}：总数 {total}，成功 {success}，失败 {fail}，耗时 {self._format_duration(duration)}"
 
     def _refresh_owner_label(self):
-        if config.REPO_OWNER:
-            self.owner_label.setText(f"仓库所有者：{config.REPO_OWNER}")
+        if repo_config.REPO_OWNER:
+            self.owner_label.setText(f"仓库所有者：{repo_config.REPO_OWNER}")
 
     @staticmethod
     def _format_duration(seconds: int) -> str:
