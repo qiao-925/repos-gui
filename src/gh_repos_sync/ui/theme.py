@@ -12,9 +12,19 @@ CUSTOM_STYLESHEET = """
         font-size: 12pt;
         font-weight: bold;
     }
+    QLabel#app-title {
+        color: #f5f5f5;
+        font-size: 14pt;
+        font-weight: 700;
+        padding-bottom: 2px;
+    }
     QLabel#section-subtitle {
         color: #bdbdbd;
         font-size: 9pt;
+    }
+    QLabel#app-subtitle {
+        color: #bdbdbd;
+        font-size: 9.5pt;
     }
     QLineEdit, QTextEdit, QListWidget, QSpinBox {
         background-color: #242424;

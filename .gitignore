@@ -21,3 +21,6 @@ dist/
 .claude/
 .codex/
 .cursor
+
+# 忽略 uv 虚拟环境
+.venv/

@@ -3,21 +3,8 @@
 ## 快速打包
 
 ```
-pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
-```
-
-## 自动重打包与运行（开发）
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts/rebuild-run.ps1
-```
-
-- 脚本会自动：结束旧进程 -> 编译检查 -> PyInstaller 打包 -> 启动新程序。
-
-如需监听 `src/` 改动并自动重建运行：
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File scripts/watch-rebuild-run.ps1
+uv sync --group build
+uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
 ```
 
 单页 GUI 工具，覆盖 **同步 / AI 分类 / 批量克隆 / 完整性检查**。
@@ -121,17 +108,25 @@ chmod +x ./dist/gh-repos-gui && ./dist/gh-repos-gui
 ## 从源码运行
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 使用 uv 安装依赖（推荐）
+uv sync
 
 # 运行 GUI
+uv run python gui.py
+```
+
+兼容旧流程（不推荐）：
+
+```bash
+pip install -r requirements.txt
 python gui.py
 ```
 
 ## 构建可执行文件
 
 ```
-pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
+uv sync --group build
+uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
 ```
 
 - 构建产物：`dist/gh-repos-gui.exe`

@@ -26,9 +26,9 @@ $action = {
     }
     $global:lastRun = $now
 
-    Write-Host "\n[$($now.ToString('HH:mm:ss'))] Change detected -> rebuild-run"
+    Write-Host "`n[$($now.ToString('HH:mm:ss'))] Change detected -> rebuild-run"
     try {
-        powershell.exe -ExecutionPolicy Bypass -File $scriptPath
+        & $scriptPath
     }
     catch {
         Write-Host "Rebuild failed: $($_.Exception.Message)"
@@ -43,4 +43,3 @@ Register-ObjectEvent $fsw Deleted -Action $action | Out-Null
 while ($true) {
     Start-Sleep -Seconds 1
 }
-

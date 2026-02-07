@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "github-repos-clone"
+version = "1.0.0"
+description = "GitHub 仓库批量分类克隆 GUI"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "qiao-925" }]
+license = { text = "MIT" }
+keywords = ["github", "clone", "gui", "pyqt"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Version Control :: Git",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "PyQt5>=5.15.0",
+  "qt-material>=2.14",
+  "keyring>=25.0",
+  "colorama>=0.4.6; platform_system == 'Windows'",
+]
+
+[project.urls]
+Homepage = "https://github.com/qiao-925/github-repos-batch-sync-script"
+
+[project.scripts]
+gh-repos-gui = "gh_repos_sync.ui.main_window:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+build = [
+  "pyinstaller>=6.0",
+]
+
+[tool.uv]
+default-groups = []

@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel,
-    QLineEdit, QListWidget, QMainWindow, QMessageBox, QProgressBar,
+    QLayout, QLineEdit, QListWidget, QMainWindow, QMessageBox, QProgressBar,
     QPushButton, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 )
 
@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         """初始化界面"""
         self.setWindowTitle("GitHub 仓库管理工具")
-        self.setMinimumSize(920, 820)
+        self.setMinimumSize(920, 880)
         self.setWindowIcon(build_app_icon())
         apply_windows_dark_titlebar(self)
 
@@ -121,20 +121,29 @@ class MainWindow(QMainWindow):
 
         # 标题区域
         title_frame = QFrame()
+        title_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         title_layout = QVBoxLayout()
+        title_layout.setSizeConstraint(QLayout.SetMinimumSize)
+        title_layout.setContentsMargins(0, 2, 0, 10)
+        title_layout.setSpacing(4)
         title_frame.setLayout(title_layout)
 
         title_label = QLabel("GitHub 仓库管理工具")
-        title_label.setAlignment(Qt.AlignLeft)
-        title_label.setObjectName("section-title")
+        title_label.setAlignment(Qt.AlignHCenter)
+        title_label.setObjectName("app-title")
+        title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        title_label.setMinimumHeight(32)
         title_layout.addWidget(title_label)
 
         subtitle_label = QLabel("同步 / 批量克隆 / 完整性检查")
-        subtitle_label.setAlignment(Qt.AlignLeft)
-        subtitle_label.setObjectName("section-subtitle")
+        subtitle_label.setAlignment(Qt.AlignHCenter)
+        subtitle_label.setObjectName("app-subtitle")
+        subtitle_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        subtitle_label.setMinimumHeight(20)
         title_layout.addWidget(subtitle_label)
 
         main_layout.addWidget(title_frame)
+        main_layout.addSpacing(6)
 
         # 授权登录（流程第一步）
         main_layout.addLayout(self._make_section_header("授权登录"))
@@ -221,15 +230,21 @@ class MainWindow(QMainWindow):
         params_layout.setLabelAlignment(Qt.AlignRight)
         params_layout.setFormAlignment(Qt.AlignLeft)
         params_layout.setHorizontalSpacing(16)
+        params_layout.setVerticalSpacing(10)
+        params_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         params_frame.setLayout(params_layout)
 
         self.tasks_spin = QSpinBox()
         self.tasks_spin.setRange(1, 64)
         self.tasks_spin.setValue(DEFAULT_TASKS)
+        self.tasks_spin.setMinimumHeight(34)
+        self.tasks_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.connections_spin = QSpinBox()
         self.connections_spin.setRange(1, 64)
         self.connections_spin.setValue(DEFAULT_CONNECTIONS)
+        self.connections_spin.setMinimumHeight(34)
+        self.connections_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         params_layout.addRow("并行任务数", self.tasks_spin)
         params_layout.addRow("并行连接数", self.connections_spin)
