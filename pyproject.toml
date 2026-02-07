@@ -48,3 +48,6 @@ build = [
 
 [tool.uv]
 default-groups = []
+required-environments = [
+  "sys_platform == 'win32'",
+]

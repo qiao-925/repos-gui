@@ -6,13 +6,15 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QApplication, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel,
-    QLayout, QLineEdit, QListWidget, QMainWindow, QMessageBox, QProgressBar,
-    QPushButton, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget
+    QLayout, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
+    QPushButton, QShortcut, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout,
+    QWidget
 )
 
 if hasattr(Qt, "AA_EnableHighDpiScaling"):
@@ -27,17 +29,22 @@ except Exception:
     HAS_QT_MATERIAL = False
 
 from ..core import repo_config
+from ..core.process_control import request_shutdown
 from ..core.repo_config import read_owner, write_owner
 from ..infra import ai, auth
 from .chrome import apply_windows_dark_titlebar, build_app_icon, make_section_header
-from .theme import CUSTOM_STYLESHEET
+from .theme import build_custom_stylesheet
 from .workers import (
-    AiGenerateWorker, ApplyWorker, AuthWorker, CheckWorker, CloneWorker,
+    AiGenerateWorker, ApplyWorker, AuthWorker, CloneWorker, PullWorker,
     ProfileWorker, SyncWorker
 )
 
 DEFAULT_TASKS = 5
 DEFAULT_CONNECTIONS = 8
+DEFAULT_UI_SCALE = 1.0
+MIN_UI_SCALE = 0.80
+MAX_UI_SCALE = 1.30
+UI_SCALE_STEP = 0.05
 USE_CUSTOM_THEME = True
 CONFIG_PATH = repo_config.SCRIPT_DIR / repo_config.CONFIG_FILE
 FAILED_REPOS_FILE = repo_config.SCRIPT_DIR / "failed-repos.txt"
@@ -54,7 +61,7 @@ class MainWindow(QMainWindow):
         self.sync_worker = None
         self.apply_worker = None
         self.clone_worker = None
-        self.check_worker = None
+        self.pull_worker = None
         self.auth_worker = None
         self.profile_worker = None
         self.client_id = auth.load_client_id() or ""
@@ -63,8 +70,11 @@ class MainWindow(QMainWindow):
         self.public_repo_count = -1
         self.profile_silent = False
         self.ai_generate_worker = None
+        self.ui_scale = DEFAULT_UI_SCALE
+        self.current_execution_label = "克隆"
 
         self.init_ui()
+        self._setup_zoom_shortcuts()
         self._update_auth_status()
         if self.token:
             self.refresh_profile(silent=True)
@@ -75,9 +85,95 @@ class MainWindow(QMainWindow):
                 pass
         if USE_CUSTOM_THEME:
             self.apply_custom_theme()
+        self._apply_ui_metrics()
 
     def apply_custom_theme(self):
-        self.app.setStyleSheet(CUSTOM_STYLESHEET)
+        self.app.setStyleSheet(build_custom_stylesheet(self.ui_scale))
+
+    @staticmethod
+    def _clamp_ui_scale(scale: float) -> float:
+        return max(MIN_UI_SCALE, min(MAX_UI_SCALE, scale))
+
+    def _scaled(self, value: int) -> int:
+        return max(1, int(round(value * self.ui_scale)))
+
+    def _setup_zoom_shortcuts(self) -> None:
+        self.zoom_in_shortcut = QShortcut(QKeySequence.ZoomIn, self)
+        self.zoom_out_shortcut = QShortcut(QKeySequence.ZoomOut, self)
+        self.zoom_reset_shortcut = QShortcut(QKeySequence("Ctrl+0"), self)
+        self.zoom_in_shortcut_alt = QShortcut(QKeySequence("Ctrl+="), self)
+
+        self.zoom_in_shortcut.activated.connect(lambda: self.adjust_ui_scale(UI_SCALE_STEP))
+        self.zoom_in_shortcut_alt.activated.connect(lambda: self.adjust_ui_scale(UI_SCALE_STEP))
+        self.zoom_out_shortcut.activated.connect(lambda: self.adjust_ui_scale(-UI_SCALE_STEP))
+        self.zoom_reset_shortcut.activated.connect(self.reset_ui_scale)
+
+    def adjust_ui_scale(self, delta: float) -> None:
+        target_scale = self._clamp_ui_scale(round(self.ui_scale + delta, 2))
+        if target_scale == self.ui_scale:
+            return
+        self.ui_scale = target_scale
+        if USE_CUSTOM_THEME:
+            self.apply_custom_theme()
+        self._apply_ui_metrics()
+        self.log(f"界面缩放：{int(round(self.ui_scale * 100))}%")
+
+    def reset_ui_scale(self) -> None:
+        if self.ui_scale == DEFAULT_UI_SCALE:
+            return
+        self.ui_scale = DEFAULT_UI_SCALE
+        if USE_CUSTOM_THEME:
+            self.apply_custom_theme()
+        self._apply_ui_metrics()
+        self.log("界面缩放：100%")
+
+    def _apply_ui_metrics(self) -> None:
+        self.setMinimumSize(self._scaled(800), self._scaled(780))
+        self.main_layout.setSpacing(self._scaled(8))
+        self.main_layout.setContentsMargins(
+            self._scaled(18), self._scaled(18), self._scaled(18), self._scaled(18)
+        )
+
+        self.title_layout.setContentsMargins(0, self._scaled(2), 0, self._scaled(8))
+        self.title_layout.setSpacing(self._scaled(3))
+        self.title_label.setMinimumHeight(self._scaled(28))
+        self.subtitle_label.setMinimumHeight(self._scaled(18))
+
+        self.auth_layout.setSpacing(self._scaled(8))
+        self.classify_layout.setSpacing(self._scaled(8))
+        self.actions_layout.setSpacing(self._scaled(8))
+
+        self.ai_generate_btn.setMinimumHeight(self._scaled(30))
+        self.incremental_btn.setMinimumHeight(self._scaled(30))
+        self.open_file_btn.setMinimumHeight(self._scaled(30))
+        self.open_prompt_btn.setMinimumHeight(self._scaled(30))
+
+        self.params_layout.setHorizontalSpacing(self._scaled(16))
+        self.params_layout.setVerticalSpacing(self._scaled(14))
+        self.params_layout.setContentsMargins(
+            self._scaled(10), self._scaled(10), self._scaled(10), self._scaled(6)
+        )
+        self.tasks_spin.setMinimumHeight(self._scaled(38))
+        self.connections_spin.setMinimumHeight(self._scaled(38))
+        self.params_frame.setFixedHeight(self.params_layout.sizeHint().height())
+
+        self.reset_params_btn.setMinimumHeight(self._scaled(28))
+        self.clone_btn.setMinimumHeight(self._scaled(32))
+        self.pull_btn.setMinimumHeight(self._scaled(32))
+        self.retry_failed_btn.setMinimumHeight(self._scaled(32))
+        self.log_text.setMinimumHeight(self._scaled(340))
+        self.log_text.setMaximumHeight(16777215)
+
+    def closeEvent(self, event) -> None:
+        self.set_busy(True, "状态：正在关闭并终止后台任务...")
+        request_shutdown()
+
+        if self.clone_worker and self.clone_worker.isRunning():
+            self.clone_worker.wait(2000)
+        if self.pull_worker and self.pull_worker.isRunning():
+            self.pull_worker.wait(2000)
+
+        super().closeEvent(event)
 
     @staticmethod
     def _make_section_header(title: str) -> QHBoxLayout:
@@ -107,148 +203,154 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         """初始化界面"""
         self.setWindowTitle("GitHub 仓库管理工具")
-        self.setMinimumSize(920, 880)
+        self.setMinimumSize(800, 780)
         self.setWindowIcon(build_app_icon())
         apply_windows_dark_titlebar(self)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        central_widget.setLayout(main_layout)
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setSpacing(10)
+        self.main_layout.setContentsMargins(24, 24, 24, 24)
+        central_widget.setLayout(self.main_layout)
 
         # 标题区域
         title_frame = QFrame()
         title_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        title_layout = QVBoxLayout()
-        title_layout.setSizeConstraint(QLayout.SetMinimumSize)
-        title_layout.setContentsMargins(0, 2, 0, 10)
-        title_layout.setSpacing(4)
-        title_frame.setLayout(title_layout)
+        self.title_layout = QVBoxLayout()
+        self.title_layout.setSizeConstraint(QLayout.SetMinimumSize)
+        self.title_layout.setContentsMargins(0, 2, 0, 10)
+        self.title_layout.setSpacing(4)
+        title_frame.setLayout(self.title_layout)
 
-        title_label = QLabel("GitHub 仓库管理工具")
-        title_label.setAlignment(Qt.AlignHCenter)
-        title_label.setObjectName("app-title")
-        title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        title_label.setMinimumHeight(32)
-        title_layout.addWidget(title_label)
+        self.title_label = QLabel("GitHub 仓库管理工具")
+        self.title_label.setAlignment(Qt.AlignHCenter)
+        self.title_label.setObjectName("app-title")
+        self.title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.title_label.setMinimumHeight(32)
+        self.title_layout.addWidget(self.title_label)
 
-        subtitle_label = QLabel("同步 / 批量克隆 / 完整性检查")
-        subtitle_label.setAlignment(Qt.AlignHCenter)
-        subtitle_label.setObjectName("app-subtitle")
-        subtitle_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        subtitle_label.setMinimumHeight(20)
-        title_layout.addWidget(subtitle_label)
+        self.subtitle_label = QLabel("同步 / 批量克隆 / 完整性检查")
+        self.subtitle_label.setAlignment(Qt.AlignHCenter)
+        self.subtitle_label.setObjectName("app-subtitle")
+        self.subtitle_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.subtitle_label.setMinimumHeight(20)
+        self.title_layout.addWidget(self.subtitle_label)
 
-        main_layout.addWidget(title_frame)
-        main_layout.addSpacing(6)
+        self.main_layout.addWidget(title_frame)
+        self.main_layout.addSpacing(6)
 
         # 授权登录（流程第一步）
-        main_layout.addLayout(self._make_section_header("授权登录"))
+        self.main_layout.addLayout(self._make_section_header("授权登录"))
 
-        auth_layout = QHBoxLayout()
-        auth_layout.setSpacing(10)
+        self.auth_layout = QHBoxLayout()
+        self.auth_layout.setSpacing(10)
         self.auth_status_label = QLabel("登录状态：未登录")
         self.auth_status_label.setStyleSheet("font-size: 10pt;")
-        auth_layout.addWidget(self.auth_status_label, 1)
+        self.auth_layout.addWidget(self.auth_status_label, 1)
 
         self.refresh_btn = QPushButton("刷新信息")
         self.refresh_btn.clicked.connect(self.refresh_profile)
         self.refresh_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        auth_layout.addWidget(self.refresh_btn)
+        self.auth_layout.addWidget(self.refresh_btn)
 
         self.login_btn = QPushButton("登录 GitHub")
         self.login_btn.clicked.connect(self.start_login)
         self.login_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        auth_layout.addWidget(self.login_btn)
+        self.auth_layout.addWidget(self.login_btn)
 
         self.logout_btn = QPushButton("退出登录")
         self.logout_btn.clicked.connect(self.logout)
         self.logout_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        auth_layout.addWidget(self.logout_btn)
+        self.auth_layout.addWidget(self.logout_btn)
 
-        main_layout.addLayout(auth_layout)
+        self.main_layout.addLayout(self.auth_layout)
 
         self.repo_count_label = QLabel("仓库统计：未获取")
         self.repo_count_label.setStyleSheet("font-size: 10pt;")
-        main_layout.addWidget(self.repo_count_label)
+        self.main_layout.addWidget(self.repo_count_label)
 
         self.flow_hint_label = QLabel("流程：1 登录  2 分类（AI全量/增量 + 手动微调）  3 开始克隆")
         self.flow_hint_label.setStyleSheet("font-size: 9pt; color: #b0b0b0;")
-        main_layout.addWidget(self.flow_hint_label)
+        self.main_layout.addWidget(self.flow_hint_label)
+
+        self.zoom_hint_label = QLabel("缩放快捷键：Ctrl + / Ctrl - / Ctrl 0")
+        self.zoom_hint_label.setStyleSheet("font-size: 9pt; color: #8d8d8d;")
+        self.main_layout.addWidget(self.zoom_hint_label)
 
         # 分类入口
-        main_layout.addLayout(self._make_section_header("分类"))
-        classify_layout = QHBoxLayout()
-        classify_layout.setSpacing(10)
+        self.main_layout.addLayout(self._make_section_header("分类"))
+        self.classify_layout = QHBoxLayout()
+        self.classify_layout.setSpacing(10)
 
         self.ai_generate_btn = QPushButton("AI 自动分类（全量重建）")
         self.ai_generate_btn.clicked.connect(self.start_ai_generate)
         self.ai_generate_btn.setMinimumHeight(34)
         self.ai_generate_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ai_generate_btn.setCursor(Qt.PointingHandCursor)
-        classify_layout.addWidget(self.ai_generate_btn, 1)
+        self.classify_layout.addWidget(self.ai_generate_btn, 1)
 
         self.incremental_btn = QPushButton("增量更新到未分类（推荐）")
         self.incremental_btn.clicked.connect(self.start_incremental_update)
         self.incremental_btn.setMinimumHeight(34)
         self.incremental_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.incremental_btn.setCursor(Qt.PointingHandCursor)
-        classify_layout.addWidget(self.incremental_btn, 1)
+        self.classify_layout.addWidget(self.incremental_btn, 1)
 
         self.open_file_btn = QPushButton("手动编辑")
         self.open_file_btn.clicked.connect(self.open_repo_groups_file)
         self.open_file_btn.setMinimumHeight(34)
         self.open_file_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.open_file_btn.setCursor(Qt.PointingHandCursor)
-        classify_layout.addWidget(self.open_file_btn, 1)
+        self.classify_layout.addWidget(self.open_file_btn, 1)
 
         self.open_prompt_btn = QPushButton("编辑 AI Prompt")
         self.open_prompt_btn.clicked.connect(self.open_ai_prompt_file)
         self.open_prompt_btn.setMinimumHeight(34)
         self.open_prompt_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.open_prompt_btn.setCursor(Qt.PointingHandCursor)
-        classify_layout.addWidget(self.open_prompt_btn, 1)
+        self.classify_layout.addWidget(self.open_prompt_btn, 1)
 
-        main_layout.addLayout(classify_layout)
+        self.main_layout.addLayout(self.classify_layout)
 
         classify_hint = QLabel("说明：AI 自动分类会重建分组；日常维护建议使用增量更新，再手动微调。")
         classify_hint.setStyleSheet("font-size: 9pt; color: #9a9a9a;")
-        main_layout.addWidget(classify_hint)
+        self.main_layout.addWidget(classify_hint)
 
         self.owner_label = QLabel("仓库所有者：未检测")
         self.owner_label.setStyleSheet("font-size: 10pt;")
-        main_layout.addWidget(self.owner_label)
+        self.main_layout.addWidget(self.owner_label)
 
         # 参数设置
-        main_layout.addLayout(self._make_section_header("并行参数"))
+        self.main_layout.addLayout(self._make_section_header("并行参数"))
 
-        params_frame = QFrame()
-        params_layout = QFormLayout()
-        params_layout.setLabelAlignment(Qt.AlignRight)
-        params_layout.setFormAlignment(Qt.AlignLeft)
-        params_layout.setHorizontalSpacing(16)
-        params_layout.setVerticalSpacing(10)
-        params_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        params_frame.setLayout(params_layout)
+        self.params_frame = QFrame()
+        self.params_layout = QFormLayout()
+        self.params_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.params_layout.setFormAlignment(Qt.AlignLeft)
+        self.params_layout.setHorizontalSpacing(20)
+        self.params_layout.setVerticalSpacing(18)
+        self.params_layout.setContentsMargins(12, 12, 12, 8)
+        self.params_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.params_frame.setLayout(self.params_layout)
 
         self.tasks_spin = QSpinBox()
         self.tasks_spin.setRange(1, 64)
         self.tasks_spin.setValue(DEFAULT_TASKS)
-        self.tasks_spin.setMinimumHeight(34)
+        self.tasks_spin.setMinimumHeight(42)
         self.tasks_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.connections_spin = QSpinBox()
         self.connections_spin.setRange(1, 64)
         self.connections_spin.setValue(DEFAULT_CONNECTIONS)
-        self.connections_spin.setMinimumHeight(34)
+        self.connections_spin.setMinimumHeight(42)
         self.connections_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        params_layout.addRow("并行任务数", self.tasks_spin)
-        params_layout.addRow("并行连接数", self.connections_spin)
-        main_layout.addWidget(params_frame)
+        self.params_layout.addRow("并行任务数", self.tasks_spin)
+        self.params_layout.addRow("并行连接数", self.connections_spin)
+        self.params_frame.setFixedHeight(self.params_layout.sizeHint().height())
+        self.main_layout.addWidget(self.params_frame)
 
         reset_params_layout = QHBoxLayout()
         reset_params_layout.addStretch(1)
@@ -256,64 +358,75 @@ class MainWindow(QMainWindow):
         self.reset_params_btn.clicked.connect(self.reset_params)
         self.reset_params_btn.setMinimumHeight(30)
         reset_params_layout.addWidget(self.reset_params_btn)
-        main_layout.addLayout(reset_params_layout)
+        self.main_layout.addLayout(reset_params_layout)
 
         # 执行
-        main_layout.addLayout(self._make_section_header("执行"))
+        self.main_layout.addLayout(self._make_section_header("执行"))
 
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(10)
+        self.actions_layout = QHBoxLayout()
+        self.actions_layout.setSpacing(10)
 
         self.clone_btn = QPushButton("开始克隆")
         self.clone_btn.clicked.connect(self.start_clone)
         self.clone_btn.setMinimumHeight(36)
         self.clone_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.clone_btn.setCursor(Qt.PointingHandCursor)
-        actions_layout.addWidget(self.clone_btn, 1)
+        self.actions_layout.addWidget(self.clone_btn, 1)
 
-        main_layout.addLayout(actions_layout)
+        self.pull_btn = QPushButton("批量更新已克隆仓库")
+        self.pull_btn.clicked.connect(self.start_pull)
+        self.pull_btn.setMinimumHeight(36)
+        self.pull_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.pull_btn.setCursor(Qt.PointingHandCursor)
+        self.actions_layout.addWidget(self.pull_btn, 1)
 
-        run_hint = QLabel("说明：开始克隆会直接按当前 REPO-GROUPS.md 执行，无需先做增量更新。")
+        self.retry_failed_btn = QPushButton("一键重试失败仓库")
+        self.retry_failed_btn.clicked.connect(self.retry_failed_repos)
+        self.retry_failed_btn.setMinimumHeight(36)
+        self.retry_failed_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.retry_failed_btn.setCursor(Qt.PointingHandCursor)
+        self.actions_layout.addWidget(self.retry_failed_btn, 1)
+
+        self.main_layout.addLayout(self.actions_layout)
+
+        run_hint = QLabel("说明：克隆/更新都按当前 REPO-GROUPS.md 执行；失败仓库会写入 failed-repos.txt 可一键重试。")
         run_hint.setStyleSheet("font-size: 9pt; color: #9a9a9a;")
-        main_layout.addWidget(run_hint)
+        self.main_layout.addWidget(run_hint)
 
-        failed_label = QLabel(f"失败列表：{FAILED_REPOS_FILE}（自动生成，可直接选择重试）")
+        failed_label = QLabel(f"失败列表：{FAILED_REPOS_FILE}")
         failed_label.setStyleSheet("font-size: 9pt; color: #aaa;")
-        main_layout.addWidget(failed_label)
+        self.main_layout.addWidget(failed_label)
 
         # 进度条 + 状态
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        self.progress_bar.setRange(0, 0)
-        main_layout.addWidget(self.progress_bar)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.main_layout.addWidget(self.progress_bar)
+
+        self.progress_detail_label = QLabel("进度：-/-，成功 0，失败 0")
+        self.progress_detail_label.setStyleSheet("font-size: 9pt; color: #9f9f9f;")
+        self.progress_detail_label.setVisible(False)
+        self.main_layout.addWidget(self.progress_detail_label)
 
         self.status_label = QLabel("状态：就绪")
         self.status_label.setStyleSheet("font-size: 10pt; color: #bdbdbd;")
-        main_layout.addWidget(self.status_label)
+        self.main_layout.addWidget(self.status_label)
 
-        # 增量更新结果
-        main_layout.addLayout(self._make_section_header("增量更新结果"))
-
-        self.repo_list = QListWidget()
-        self.repo_list.setMinimumHeight(160)
-        main_layout.addWidget(self.repo_list)
-
-        self.stats_label = QLabel("新增仓库数: 0")
-        self.stats_label.setStyleSheet("font-size: 11pt; font-weight: bold;")
-        main_layout.addWidget(self.stats_label)
-
-        # 日志区域
-        main_layout.addLayout(self._make_section_header("操作日志"))
+        # 日志区域（包含增量更新结果）
+        self.main_layout.addLayout(self._make_section_header("操作日志"))
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMinimumHeight(220)
-        self.log_text.setMaximumHeight(320)
-        main_layout.addWidget(self.log_text)
+        self.log_text.setMinimumHeight(340)
+        self.log_text.setMaximumHeight(16777215)
+        self.main_layout.addWidget(self.log_text)
 
     def set_busy(self, busy: bool, status: str = ""):
         self.reset_params_btn.setEnabled(not busy)
         self.clone_btn.setEnabled(not busy)
+        self.pull_btn.setEnabled(not busy)
+        self.retry_failed_btn.setEnabled(not busy)
         self.login_btn.setEnabled(not busy)
         self.refresh_btn.setEnabled(not busy and bool(self.token))
         self.logout_btn.setEnabled(not busy and bool(self.token))
@@ -321,7 +434,13 @@ class MainWindow(QMainWindow):
         self.incremental_btn.setEnabled(not busy and bool(self.token))
         self.open_file_btn.setEnabled(not busy)
         self.open_prompt_btn.setEnabled(not busy)
+
         self.progress_bar.setVisible(busy)
+        self.progress_detail_label.setVisible(busy)
+        if not busy:
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_detail_label.setText("进度：-/-，成功 0，失败 0")
         if status:
             self.status_label.setText(status)
 
@@ -684,9 +803,7 @@ class MainWindow(QMainWindow):
             return
 
         self.set_busy(True, "状态：增量更新中（拉取新增仓库）...")
-        self.repo_list.clear()
         self.new_repos = []
-        self.stats_label.setText("新增仓库数: 0")
 
         self.log("🔄 开始增量更新：拉取新增仓库...")
 
@@ -712,15 +829,15 @@ class MainWindow(QMainWindow):
         self.new_repos = new_repos
 
         if new_repos:
-            self.repo_list.addItems(new_repos)
-            self.stats_label.setText(f"新增仓库数: {len(new_repos)}")
             self.log(f"✅ 发现 {len(new_repos)} 个新增仓库，准备写入“未分类”")
+            preview = "\n".join(f"  - {name}" for name in new_repos[:20])
+            suffix = "\n  ..." if len(new_repos) > 20 else ""
+            self.log(f"📋 新增仓库列表:\n{preview}{suffix}")
             self.set_busy(True, "状态：增量更新中（写入未分类）...")
             self.apply_worker = ApplyWorker(self.config_file, self.new_repos)
             self.apply_worker.finished.connect(self.on_incremental_apply_finished)
             self.apply_worker.start()
         else:
-            self.stats_label.setText("新增仓库数: 0")
             self.log("ℹ️ 没有新增仓库，REPO-GROUPS.md 已是最新")
             QMessageBox.information(self, "ℹ️ 提示", "没有新增仓库，REPO-GROUPS.md 已是最新")
             self._set_flow_hint("下一步：可直接开始克隆")
@@ -743,23 +860,104 @@ class MainWindow(QMainWindow):
         self._set_flow_hint("下一步：手动微调分类文件，然后开始克隆")
         self.open_repo_groups_file()
 
-    def start_clone(self):
-        if not self._ensure_repo_groups_file():
+    def _set_progress(self, phase: str, done: int, total: int, success: int, fail: int):
+        if total <= 0:
+            self.progress_bar.setRange(0, 0)
+            self.progress_detail_label.setText(f"阶段：{phase}，进度未知")
             return
 
+        percent = int((done / total) * 100)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(max(0, min(100, percent)))
+
+        phase_label = {
+            "clone": "克隆",
+            "check": "完整性检查",
+            "pull": "批量更新",
+        }.get(phase, phase)
+        self.progress_detail_label.setText(
+            f"阶段：{phase_label} | 进度：{done}/{total} | 成功 {success} | 失败 {fail}"
+        )
+
+    def _run_clone_with_config(self, config_file: str, log_prefix: str = "🚀 开始批量克隆..."):
+        if not Path(config_file).exists():
+            QMessageBox.warning(self, "错误", f"配置文件不存在：{config_file}")
+            return
+
+        self.current_execution_label = "克隆"
         self.set_busy(True, "状态：克隆中...")
-        self.log("🚀 开始批量克隆...")
+        self.log(log_prefix)
 
         self.clone_worker = CloneWorker(
-            self.config_file,
+            config_file,
             self.tasks_spin.value(),
-            self.connections_spin.value()
+            self.connections_spin.value(),
         )
         self.clone_worker.log_signal.connect(self.log)
+        self.clone_worker.progress_signal.connect(self._set_progress)
         self.clone_worker.finished.connect(self.on_clone_finished)
         self.clone_worker.start()
 
-    def on_clone_finished(self, success: bool, result: Dict[str, int], error: str):
+    def start_pull(self):
+        if not self._ensure_repo_groups_file():
+            return
+
+        self.current_execution_label = "批量更新"
+        self.set_busy(True, "状态：批量更新中...")
+        self.log("🔄 开始批量更新已克隆仓库...")
+
+        self.pull_worker = PullWorker(
+            self.config_file,
+            self.tasks_spin.value(),
+        )
+        self.pull_worker.log_signal.connect(self.log)
+        self.pull_worker.progress_signal.connect(self._set_progress)
+        self.pull_worker.finished.connect(self.on_pull_finished)
+        self.pull_worker.start()
+
+    def on_pull_finished(self, success: bool, result: Dict[str, Any], error: str):
+        self.set_busy(False, "状态：就绪")
+
+        if not success:
+            QMessageBox.critical(self, "❌ 错误", f"批量更新失败:\n{error}")
+            self.log(f"❌ 错误: {error}")
+            return
+
+        self._refresh_owner_label()
+        summary = self._format_summary("批量更新完成", result)
+        self.status_label.setText(f"状态：{summary}")
+        self.log(f"✅ {summary}")
+
+        failed_reasons = result.get("failed_reasons", {})
+        if isinstance(failed_reasons, dict) and failed_reasons:
+            self.log("⚠️ 批量更新失败原因详情：")
+            for repo_full, reason_code in failed_reasons.items():
+                reason_text = self._format_pull_failure_reason(str(reason_code))
+                self.log(f"   - {repo_full}: {reason_text} ({reason_code})")
+
+        if result.get("fail", 0) > 0:
+            QMessageBox.warning(
+                self,
+                "⚠️ 部分失败",
+                f"失败 {result.get('fail', 0)} 个仓库，失败列表已生成：\n{FAILED_REPOS_FILE}",
+            )
+
+        self._show_result_summary("批量更新", result)
+
+    def retry_failed_repos(self):
+        failed_path = FAILED_REPOS_FILE
+        if not failed_path.exists():
+            QMessageBox.information(self, "提示", f"未找到失败列表：\n{failed_path}")
+            return
+
+        self._run_clone_with_config(str(failed_path), "🔁 开始按 failed-repos.txt 重试失败仓库...")
+
+    def start_clone(self):
+        if not self._ensure_repo_groups_file():
+            return
+        self._run_clone_with_config(self.config_file)
+
+    def on_clone_finished(self, success: bool, result: Dict[str, Any], error: str):
         self.set_busy(False, "状态：就绪")
 
         if not success:
@@ -768,7 +966,7 @@ class MainWindow(QMainWindow):
             return
 
         self._refresh_owner_label()
-        summary = self._format_summary("克隆完成", result)
+        summary = self._format_summary(f"{self.current_execution_label}完成", result)
         self.status_label.setText(f"状态：{summary}")
         self.log(f"✅ {summary}")
 
@@ -779,42 +977,48 @@ class MainWindow(QMainWindow):
                 f"失败 {result.get('fail', 0)} 个仓库，失败列表已生成：\n{FAILED_REPOS_FILE}"
             )
 
-    def start_check(self):
-        if not self._ensure_repo_groups_file():
-            return
+        self._show_result_summary(self.current_execution_label, result)
 
-        self.set_busy(True, "状态：检查中...")
-        self.log("🧪 开始完整性检查...")
+    def _show_result_summary(self, action: str, result: Dict[str, Any]):
+        total = result.get("total", 0)
+        success = result.get("success", 0)
+        fail = result.get("fail", 0)
+        duration = result.get("duration", 0)
+        success_rate = (success / total * 100) if total else 0.0
 
-        self.check_worker = CheckWorker(
-            self.config_file,
-            self.tasks_spin.value()
-        )
-        self.check_worker.log_signal.connect(self.log)
-        self.check_worker.finished.connect(self.on_check_finished)
-        self.check_worker.start()
+        lines = [
+            f"操作：{action}",
+            f"总仓库：{total}",
+            f"成功：{success}",
+            f"失败：{fail}",
+            f"成功率：{success_rate:.1f}%",
+            f"耗时：{self._format_duration(duration)}",
+        ]
 
-    def on_check_finished(self, success: bool, result: Dict[str, int], error: str):
-        self.set_busy(False, "状态：就绪")
+        failed_file = result.get("failed_file", "")
+        if failed_file:
+            lines.append(f"失败列表：{failed_file}")
 
-        if not success:
-            QMessageBox.critical(self, "❌ 错误", f"检查失败:\n{error}")
-            self.log(f"❌ 错误: {error}")
-            return
+        message = "\n".join(lines)
+        QMessageBox.information(self, "执行结果", message)
 
-        self._refresh_owner_label()
-        summary = self._format_summary("检查完成", result)
-        self.status_label.setText(f"状态：{summary}")
-        self.log(f"✅ {summary}")
+    @staticmethod
+    def _format_pull_failure_reason(reason_code: str) -> str:
+        return {
+            "local_repo_missing": "本地仓库缺失（目录不存在或不是 Git 仓库）",
+            "not_git_repo": "目录不是 Git 仓库",
+            "remote_ref_missing": "远端分支/引用不存在",
+            "local_changes_conflict": "本地有未提交改动，无法 fast-forward",
+            "unrelated_histories": "本地与远端历史不相关",
+            "not_fast_forward": "无法快进更新（需手工处理分叉）",
+            "network_error": "网络连接失败",
+            "auth_error": "认证失败或权限不足",
+            "canceled": "任务已取消",
+            "exception": "执行异常",
+            "unknown": "未知错误",
+        }.get(reason_code, "未知错误")
 
-        if result.get("fail", 0) > 0:
-            QMessageBox.warning(
-                self,
-                "⚠️ 部分失败",
-                f"失败 {result.get('fail', 0)} 个仓库，失败列表已生成：\n{FAILED_REPOS_FILE}"
-            )
-
-    def _format_summary(self, prefix: str, result: Dict[str, int]) -> str:
+    def _format_summary(self, prefix: str, result: Dict[str, Any]) -> str:
         total = result.get("total", 0)
         success = result.get("success", 0)
         fail = result.get("fail", 0)

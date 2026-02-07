@@ -17,6 +17,13 @@ from pathlib import Path
 from typing import Optional
 
 from .check import check_repo
+from .process_control import (
+    background_subprocess_kwargs,
+    is_shutdown_requested,
+    start_tracked_process,
+    terminate_process,
+    untrack_process,
+)
 from ..infra.logger import log_error, log_info, log_success
 
 
@@ -35,7 +42,8 @@ def get_repo_url(repo_full: str) -> str:
             ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=2', '-T', 'git@github.com'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=3
+            timeout=3,
+            **background_subprocess_kwargs(),
         )
         # 检查输出中是否包含 "successfully authenticated"
         output = result.stdout.decode() + result.stderr.decode()
@@ -59,7 +67,13 @@ def get_cpu_cores() -> int:
     # Linux: 使用 nproc 或 /proc/cpuinfo
     if platform.system() == 'Linux':
         try:
-            result = subprocess.run(['nproc'], capture_output=True, text=True, timeout=1)
+            result = subprocess.run(
+                ['nproc'],
+                capture_output=True,
+                text=True,
+                timeout=1,
+                **background_subprocess_kwargs(),
+            )
             if result.returncode == 0:
                 cores = int(result.stdout.strip())
         except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
@@ -79,7 +93,13 @@ def get_cpu_cores() -> int:
     # macOS: 使用 sysctl
     elif platform.system() == 'Darwin':
         try:
-            result = subprocess.run(['sysctl', '-n', 'hw.ncpu'], capture_output=True, text=True, timeout=1)
+            result = subprocess.run(
+                ['sysctl', '-n', 'hw.ncpu'],
+                capture_output=True,
+                text=True,
+                timeout=1,
+                **background_subprocess_kwargs(),
+            )
             if result.returncode == 0:
                 cores = int(result.stdout.strip())
         except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
@@ -116,6 +136,10 @@ def clone_repo(
     if not repo_full or not repo_name or not group_folder:
         log_error("clone_repo: 参数不完整")
         return False
+
+    if is_shutdown_requested():
+        log_error(f"克隆已取消（程序正在退出）: {repo_full}")
+        return False
     
     # 构建目标路径
     target_path = Path(group_folder) / repo_name
@@ -151,7 +175,8 @@ def clone_repo(
                         check=True,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
-                        timeout=10
+                        timeout=10,
+                        **background_subprocess_kwargs(),
                     )
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
                     log_error(f"删除目录失败: {target_path} - {e}")
@@ -198,12 +223,24 @@ def clone_repo(
     ]
     
     try:
-        # 执行 Git 克隆命令（实时显示输出）
-        # 不使用 PIPE，让输出直接显示到终端
-        result = subprocess.run(
+        process = start_tracked_process(
             git_cmd,
-            check=True
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
+        try:
+            result_code = process.wait()
+        finally:
+            untrack_process(process)
+
+        if is_shutdown_requested():
+            terminate_process(process)
+            log_error(f"克隆已取消（程序正在退出）: {repo_full}")
+            _cleanup_failed_directory(target_path)
+            return False
+
+        if result_code != 0:
+            raise subprocess.CalledProcessError(result_code, git_cmd)
         
         log_success(f"克隆成功: {repo_full}")
         return True
@@ -245,7 +282,8 @@ def _cleanup_failed_directory(target_path: Path) -> None:
                     check=False,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=5
+                    timeout=5,
+                    **background_subprocess_kwargs(),
                 )
             except Exception:
                 pass  # 忽略清理失败

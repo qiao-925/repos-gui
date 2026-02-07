@@ -7,7 +7,7 @@ uv sync --group build
 uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
 ```
 
-单页 GUI 工具，覆盖 **同步 / AI 分类 / 批量克隆 / 完整性检查**。
+单页 GUI 工具，覆盖 **同步 / AI 分类 / 批量克隆 / 批量更新 / 失败重试**。
 
 ## 快速开始
 
@@ -32,18 +32,22 @@ chmod +x ./dist/gh-repos-gui && ./dist/gh-repos-gui
 | AI 自动分类（全量） | 调用 DeepSeek API 重建分类（会覆盖现有分组结果） |
 | 增量更新到未分类 | 自动发现新增仓库并写入 `未分类`，用于日常增量维护 |
 | 手动分类 | 直接编辑 REPO-GROUPS.md 文件进行手动整理 |
-| 批量克隆 | 按分组并行克隆仓库，支持增量更新（已存在跳过） |
-| 完整性检查 | 对本地仓库执行 `git fsck` 检查 |
-| 失败重试 | 自动生成 `failed-repos.txt`，可直接重新执行 |
+| 批量克隆 | 按分组并行克隆仓库，已存在且完整的仓库自动跳过 |
+| 克隆后完整性校验 | 克隆完成后自动执行 `git fsck` 校验，失败会计入失败清单 |
+| 批量更新已克隆仓库 | 对本地已克隆仓库并行执行 `git pull --ff-only` |
+| 失败重试（一键） | 自动生成 `failed-repos.txt`，支持按钮一键重试失败仓库 |
+| 执行进度条 | 显示阶段（克隆/校验/更新）、完成数、成功数、失败数 |
+| 运行中停止 | 克隆/批量更新执行中可点击「停止」，后台任务会收到终止请求 |
+| 结果汇总与失败原因 | 执行结束弹出成功率汇总；批量更新失败会在日志输出失败原因 |
 
 ## 使用流程
 
 ```
-1. 登录 GitHub  →  2. 分类（AI全量 / 增量更新 + 手动微调）  →  3. 开始克隆
+1. 登录 GitHub  →  2. 分类（AI全量 / 增量更新 + 手动微调）  →  3. 开始克隆 / 批量更新 / 失败重试
 ```
 
 - 首次建档建议：`AI 自动分类（全量）` → 手动微调 → 开始克隆
-- 日常维护建议：`增量更新到未分类` → 手动微调 → 开始克隆
+- 日常维护建议：`增量更新到未分类` → 手动微调 → 开始克隆 → 批量更新已克隆仓库
 
 ## 登录授权
 
@@ -138,7 +142,7 @@ uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui 
 src/
   gh_repos_sync/
     ui/                  # 界面层：只负责交互与显示
-      main_window.py     # 主流程页面（登录→分类→同步→克隆/检查）
+      main_window.py     # 主流程页面（登录→分类→同步→克隆/更新/重试）
       dialogs.py         # 分类编辑对话框
       workers.py         # 后台线程（避免阻塞 UI）
       theme.py           # 主题样式
@@ -146,11 +150,12 @@ src/
 
     application/         # 用例层：按业务流程编排
       ai_generation.py   # 分类流程：拉仓库 + AI 分类 + 写入分组文件
-      execution.py       # 执行流程：克隆+检查 / 仅检查
+      execution.py       # 执行流程：克隆+校验 / 批量更新
 
     core/                # 核心能力层：高复用、本地规则
       repo_config.py     # REPO-GROUPS 读写、owner 读写、同步预览/应用
       clone.py           # 单仓库克隆
+      pull.py            # 单仓库更新（git pull）
       parallel.py        # 并行克隆调度
       check.py           # 仓库完整性检查（git fsck）
       failed_repos.py    # 失败任务文件生成
@@ -183,7 +188,8 @@ README.md
 
 - 登录授权：`ui/main_window.py` + `ui/workers.py` + `infra/auth.py`
 - 仓库分类：`ui/dialogs.py` + `application/ai_generation.py` + `core/repo_config.py`
-- 克隆检查：`application/execution.py` + `core/clone.py` + `core/parallel.py` + `core/check.py`
+- 克隆校验：`application/execution.py` + `core/clone.py` + `core/parallel.py` + `core/check.py`
+- 批量更新：`application/execution.py` + `core/pull.py`
 
 ## 依赖
 

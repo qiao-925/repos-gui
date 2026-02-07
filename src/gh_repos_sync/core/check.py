@@ -11,9 +11,15 @@
 
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from .process_control import (
+    is_shutdown_requested,
+    start_tracked_process,
+    terminate_process,
+    untrack_process,
+)
 from ..infra.logger import log_error, log_info, log_success, log_warning
 
 
@@ -31,23 +37,38 @@ def check_repo(repo_path: Path, repo_full: str, timeout: int = 30) -> Tuple[bool
     # 检查是否是 Git 仓库
     if not (repo_path / ".git").exists():
         return False, "不是 Git 仓库（缺少 .git 目录）"
+
+    if is_shutdown_requested():
+        return False, "检查已取消（程序正在退出）"
     
     # 执行 git fsck 检查
     try:
-        result = subprocess.run(
+        process = start_tracked_process(
             ['git', '-C', str(repo_path), 'fsck', '--no-progress', '--strict'],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
-            check=False
         )
+
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+            result_return_code = process.returncode
+        except subprocess.TimeoutExpired:
+            terminate_process(process)
+            return False, "检查超时"
+        finally:
+            untrack_process(process)
+
+        if is_shutdown_requested():
+            terminate_process(process)
+            return False, "检查已取消（程序正在退出）"
         
         # git fsck 返回 0 表示没有错误
-        if result.returncode == 0:
+        if result_return_code == 0:
             return True, None
         
         # 返回非 0 表示有问题
-        stderr = result.stderr.strip()
+        stderr = (stderr or "").strip()
         
         # 忽略常见的警告（dangling objects 是正常的）
         if 'dangling' in stderr.lower():
@@ -67,7 +88,8 @@ def check_repo(repo_path: Path, repo_full: str, timeout: int = 30) -> Tuple[bool
 def check_repos_parallel(
     tasks: List[Dict[str, str]],
     parallel_tasks: int = 5,
-    timeout: int = 30
+    timeout: int = 30,
+    progress_cb: Optional[Callable[[int, int, int, int], None]] = None,
 ) -> Tuple[int, int, List[Dict[str, str]]]:
     """并行检查多个仓库
     
@@ -91,6 +113,9 @@ def check_repos_parallel(
     success_count = 0
     fail_count = 0
     failed_tasks = []
+
+    if progress_cb:
+        progress_cb(0, total, success_count, fail_count)
     
     with ThreadPoolExecutor(max_workers=parallel_tasks) as executor:
         future_to_task = {}
@@ -105,6 +130,9 @@ def check_repos_parallel(
             future_to_task[future] = task
         
         for future in as_completed(future_to_task):
+            if is_shutdown_requested():
+                log_warning("检测到程序退出请求，停止后续完整性检查收集")
+                break
             task = future_to_task[future]
             try:
                 is_valid, error_msg = future.result()
@@ -119,6 +147,10 @@ def check_repos_parallel(
                 fail_count += 1
                 failed_tasks.append(task)
                 log_error(f"检查异常: {task['repo_full']} - {e}")
+
+            if progress_cb:
+                done = success_count + fail_count
+                progress_cb(done, total, success_count, fail_count)
     
     log_info(f"并行检查完成，通过: {success_count}, 失败: {fail_count}")
     return success_count, fail_count, failed_tasks

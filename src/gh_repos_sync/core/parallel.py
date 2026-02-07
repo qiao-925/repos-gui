@@ -5,16 +5,18 @@
 #   - 结果收集和统计
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .clone import clone_repo
+from .process_control import is_shutdown_requested
 from ..infra.logger import log_error, log_info, log_success, log_warning
 
 
 def execute_parallel_clone(
     tasks: List[Dict[str, str]],
     parallel_tasks: int,
-    parallel_connections: int
+    parallel_connections: int,
+    progress_cb: Optional[Callable[[int, int, int, int], None]] = None,
 ) -> Tuple[int, int, List[Dict[str, str]]]:
     """并行执行克隆任务
     
@@ -38,6 +40,9 @@ def execute_parallel_clone(
     success_count = 0
     fail_count = 0
     failed_tasks = []
+
+    if progress_cb:
+        progress_cb(0, total, success_count, fail_count)
     
     # 使用线程池执行并行任务（自动管理并发数）
     with ThreadPoolExecutor(max_workers=parallel_tasks) as executor:
@@ -55,6 +60,9 @@ def execute_parallel_clone(
         
         # 收集结果（按完成顺序）
         for future in as_completed(future_to_task):
+            if is_shutdown_requested():
+                log_warning("检测到程序退出请求，停止后续克隆任务收集")
+                break
             task = future_to_task[future]
             try:
                 success = future.result()
@@ -69,6 +77,10 @@ def execute_parallel_clone(
                 fail_count += 1
                 failed_tasks.append(task)
                 log_error(f"克隆异常: {task['repo_full']} - {e}")
+
+            if progress_cb:
+                done = success_count + fail_count
+                progress_cb(done, total, success_count, fail_count)
     
     log_info(f"并行克隆执行完成，成功: {success_count}, 失败: {fail_count}")
     return success_count, fail_count, failed_tasks
