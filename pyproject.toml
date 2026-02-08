@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/qiao-925/github-repos-batch-sync-script"
+Homepage = "https://github.com/qiao-925/repos-gui"
 
 [project.scripts]
 gh-repos-gui = "gh_repos_sync.ui.main_window:main"
