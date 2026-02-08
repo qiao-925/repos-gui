@@ -7,8 +7,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from ..application.ai_generation import generate_repo_groups_with_ai
 from ..application.execution import run_clone_and_check, run_pull_updates
 from ..core.repo_config import apply_sync, preview_sync
-from ..infra import ai, auth
-from ..infra.github_api import fetch_public_repos
+from ..infra import auth
 from ..infra.logger import get_log_state, set_log_callback
 
 
@@ -118,53 +117,6 @@ class ProfileWorker(QThread):
             self.finished.emit(False, "", -1, error)
             return
         self.finished.emit(True, login or "", public_repos, "")
-
-
-class RepoFetchWorker(QThread):
-    """拉取仓库列表线程"""
-
-    finished = pyqtSignal(bool, list, str)  # 成功标志, repos, 错误信息
-
-    def __init__(self, owner: str, token: str):
-        super().__init__()
-        self.owner = owner
-        self.token = token
-
-    def run(self):
-        success, repos, error = fetch_public_repos(self.owner, token=self.token or None)
-        self.finished.emit(success, repos, error)
-
-
-class AiClassifyWorker(QThread):
-    """AI 分类线程"""
-
-    progress = pyqtSignal(int, int)  # 当前块, 总块
-    finished = pyqtSignal(bool, dict, str)  # 成功标志, mapping, 错误信息
-
-    def __init__(self, repos: List[Dict[str, object]], groups: List[str], api_key: str, base_url: str, model: str):
-        super().__init__()
-        self.repos = repos
-        self.groups = groups
-        self.api_key = api_key
-        self.base_url = base_url
-        self.model = model
-
-    def run(self):
-        def _progress(done: int, total: int) -> None:
-            self.progress.emit(done, total)
-
-        mapping, error = ai.classify_repos(
-            self.repos,
-            self.groups,
-            self.api_key,
-            base_url=self.base_url,
-            model=self.model,
-            progress_cb=_progress,
-        )
-        if error:
-            self.finished.emit(False, {}, error)
-            return
-        self.finished.emit(True, mapping, "")
 
 
 class AiGenerateWorker(QThread):
@@ -280,4 +232,3 @@ class PullWorker(QThread):
             self.finished.emit(success, result, error)
         finally:
             set_log_callback(prev_callback, log_to_stdout=prev_stdout, log_to_stderr=prev_stderr)
-

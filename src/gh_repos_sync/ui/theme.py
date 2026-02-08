@@ -92,6 +92,3 @@ def build_custom_stylesheet(scale: float = 1.0) -> str:
         min-height: 1px;
     }}
 """
-
-
-CUSTOM_STYLESHEET = build_custom_stylesheet(1.0)

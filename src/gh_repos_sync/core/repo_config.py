@@ -335,62 +335,6 @@ def apply_sync(config_file: str, new_repos: List[str]) -> Tuple[bool, str]:
     return True, ""
 
 
-def sync_repos(config_file: str = CONFIG_FILE) -> int:
-    """Sync newly added repos to `未分类` group."""
-    config_path = resolve_config_path(config_file)
-    if not config_path.exists():
-        log_error(f"配置文件不存在: {config_path}")
-        return 1
-    if not config_path.is_file():
-        log_error(f"不是有效的文件: {config_path}")
-        return 1
-
-    try:
-        content, encoding, newline, has_trailing_newline = read_text_preserve_encoding(config_path)
-    except Exception as exc:
-        log_error(f"读取配置文件失败: {config_path} - {exc}")
-        return 1
-
-    try:
-        owner = extract_owner(content)
-    except ValueError as exc:
-        log_error(str(exc))
-        return 1
-
-    existing_repos = set(extract_existing_repos(content))
-
-    log_info(f"开始同步公共仓库（owner: {owner}）")
-    try:
-        remote_repos = _fetch_public_repo_names(owner)
-    except ValueError as exc:
-        log_error(str(exc))
-        return 1
-
-    new_repos = sorted([repo for repo in remote_repos if repo not in existing_repos])
-    if not new_repos:
-        log_info("没有新增仓库，REPO-GROUPS.md 已是最新")
-        return 0
-
-    lines = content.splitlines()
-    updated_lines, added_count = add_repos_to_unclassified(lines, new_repos)
-    if added_count == 0:
-        log_info("未分类分组已包含新增仓库，无需更新")
-        return 0
-
-    updated_text = newline.join(updated_lines)
-    try:
-        write_text_preserve_encoding(config_path, updated_text, encoding, newline, has_trailing_newline)
-    except Exception as exc:
-        log_error(f"写入配置文件失败: {config_path} - {exc}")
-        return 1
-
-    log_success(f"同步完成，新增 {added_count} 个仓库已写入\"未分类\"")
-    for repo in new_repos:
-        log_info(f"+ {repo}")
-
-    return 0
-
-
 __all__ = [
     "CONFIG_FILE",
     "REPO_OWNER",
@@ -410,5 +354,4 @@ __all__ = [
     "write_owner",
     "preview_sync",
     "apply_sync",
-    "sync_repos",
 ]

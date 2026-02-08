@@ -375,15 +375,6 @@ def save_api_key(key: str) -> str:
     return "file"
 
 
-def clear_api_key() -> None:
-    if _keyring_available():
-        try:
-            _delete_key_from_keyring()
-        except Exception:
-            pass
-    _delete_key_from_file()
-
-
 def _post_json(url: str, payload: Dict, api_key: str, timeout: int = 30) -> Dict:
     data = json.dumps(payload).encode("utf-8")
     req = request.Request(

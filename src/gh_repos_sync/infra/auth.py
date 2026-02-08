@@ -266,11 +266,3 @@ def fetch_user_profile(token: str) -> Tuple[Optional[str], int, str]:
         return None, -1, "未获取到登录账号"
     public_repos = data.get("public_repos", -1)
     return login, public_repos if isinstance(public_repos, int) else -1, ""
-
-
-def fetch_login(token: str) -> Tuple[Optional[str], str]:
-    """兼容旧接口：仅返回登录名。"""
-    login, _, error = fetch_user_profile(token)
-    if error:
-        return None, error
-    return login, ""
