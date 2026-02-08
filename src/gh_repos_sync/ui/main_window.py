@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -49,6 +50,9 @@ USE_CUSTOM_THEME = True
 CONFIG_PATH = repo_config.SCRIPT_DIR / repo_config.CONFIG_FILE
 FAILED_REPOS_FILE = repo_config.SCRIPT_DIR / "failed-repos.txt"
 BACKUP_FILE_PREFIX = "REPO-GROUPS.backup"
+LEGACY_DIST_DIR = repo_config.SCRIPT_DIR / "dist"
+LEGACY_CONFIG_PATH = LEGACY_DIST_DIR / repo_config.CONFIG_FILE
+LEGACY_FAILED_REPOS_PATH = LEGACY_DIST_DIR / "failed-repos.txt"
 
 class MainWindow(QMainWindow):
     """主窗口"""
@@ -56,6 +60,8 @@ class MainWindow(QMainWindow):
     def __init__(self, app):
         super().__init__()
         self.app = app
+        self.startup_notices: List[str] = []
+        self._migrate_legacy_runtime_files()
         self.config_file = str(CONFIG_PATH)
         self.new_repos: List[str] = []
         self.sync_worker = None
@@ -86,6 +92,25 @@ class MainWindow(QMainWindow):
         if USE_CUSTOM_THEME:
             self.apply_custom_theme()
         self._apply_ui_metrics()
+        for notice in self.startup_notices:
+            self.log(notice)
+
+    def _migrate_legacy_runtime_files(self) -> None:
+        migrations = [
+            (LEGACY_CONFIG_PATH, CONFIG_PATH, "配置文件"),
+            (LEGACY_FAILED_REPOS_PATH, FAILED_REPOS_FILE, "失败列表"),
+        ]
+
+        for source, target, label in migrations:
+            if not source.exists() or not source.is_file() or target.exists():
+                continue
+
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(source), str(target))
+                self.startup_notices.append(f"♻️ 已迁移{label}：{source} -> {target}")
+            except Exception as exc:
+                self.startup_notices.append(f"⚠️ 迁移{label}失败：{exc}")
 
     def apply_custom_theme(self):
         self.app.setStyleSheet(build_custom_stylesheet(self.ui_scale))
@@ -606,10 +631,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "提示", f"请手动打开文件：{path}")
 
     def open_ai_prompt_file(self):
-        prompt_path = ai.get_classify_prompt_path()
-        prompt_path.parent.mkdir(parents=True, exist_ok=True)
-        if not prompt_path.exists():
-            ai.build_classify_system_prompt([])
+        prompt_path = ai.ensure_classify_prompt_file()
 
         try:
             if sys.platform == "win32":
@@ -701,6 +723,14 @@ class MainWindow(QMainWindow):
             )
             if not ok or not api_key.strip():
                 return
+
+        try:
+            prompt_path = ai.ensure_classify_prompt_file()
+            prompt_text = prompt_path.read_text(encoding="utf-8")
+            prompt_sha = hashlib.sha1(prompt_text.encode("utf-8")).hexdigest()[:8]
+            self.log(f"🧠 AI Prompt 生效文件: {prompt_path} (sha1:{prompt_sha})")
+        except Exception as exc:
+            self.log(f"⚠️ AI Prompt 读取失败，将按默认逻辑继续: {exc}")
             ai.save_api_key(api_key.strip())
             api_key = api_key.strip()
 

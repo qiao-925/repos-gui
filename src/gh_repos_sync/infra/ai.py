@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from urllib import request, error
 
+from .paths import SCRIPT_DIR
+
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
 
@@ -47,14 +49,6 @@ DEFAULT_CLASSIFY_PROMPT_TEMPLATE = """你是一个严谨的 GitHub 仓库分类�
 
 现在开始分类，并仅输出 JSON 数组。"""
 
-HARD_CONSTRAINTS_TEMPLATE = """
-硬性约束（系统追加）：
-- 分组总数不得超过 {{MAX_GROUPS}} 个（包含“未分类”）。
-- 仓库名前缀一致时（如 `abc-api` / `abc-web`）优先归同一分组。
-- 若会超过上限，优先合并小类到语义最接近的已有分组。
-"""
-
-
 def _get_config_dir() -> Path:
     if os.name == "nt":
         base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or str(Path.home())
@@ -71,8 +65,78 @@ def _get_config_path() -> Path:
     return _get_config_dir() / "auth.json"
 
 
-def _get_classify_prompt_path() -> Path:
+def _get_legacy_classify_prompt_path() -> Path:
     return _get_config_dir() / CLASSIFY_PROMPT_FILE
+
+
+def _get_classify_prompt_path() -> Path:
+    return SCRIPT_DIR / CLASSIFY_PROMPT_FILE
+
+
+def _get_stale_dist_prompt_path(primary_path: Path) -> Optional[Path]:
+    script_dir = SCRIPT_DIR
+    candidates: List[Path] = []
+
+    if script_dir.name.lower() == "dist":
+        candidates.append(script_dir / CLASSIFY_PROMPT_FILE)
+    else:
+        dist_dir = script_dir / "dist"
+        if dist_dir.is_dir():
+            candidates.append(dist_dir / CLASSIFY_PROMPT_FILE)
+
+    for candidate in candidates:
+        if candidate != primary_path:
+            return candidate
+    return None
+
+
+def _remove_prompt_file_if_exists(path: Optional[Path]) -> None:
+    if not path or not path.exists():
+        return
+    try:
+        if path.is_file():
+            path.unlink()
+    except Exception:
+        pass
+
+
+def _ensure_classify_prompt_file() -> Path:
+    primary_path = _get_classify_prompt_path()
+    legacy_path = _get_legacy_classify_prompt_path()
+    stale_dist_path = _get_stale_dist_prompt_path(primary_path)
+
+    if primary_path.exists():
+        _remove_prompt_file_if_exists(stale_dist_path)
+        return primary_path
+
+    for source_path in (stale_dist_path, legacy_path):
+        if not source_path or not source_path.exists():
+            continue
+        try:
+            content = source_path.read_text(encoding="utf-8")
+            if content.strip():
+                primary_path.parent.mkdir(parents=True, exist_ok=True)
+                primary_path.write_text(content, encoding="utf-8")
+                _remove_prompt_file_if_exists(stale_dist_path)
+                return primary_path
+        except Exception:
+            continue
+
+    try:
+        primary_path.parent.mkdir(parents=True, exist_ok=True)
+        primary_path.write_text(DEFAULT_CLASSIFY_PROMPT_TEMPLATE, encoding="utf-8")
+        _remove_prompt_file_if_exists(stale_dist_path)
+        return primary_path
+    except Exception:
+        pass
+
+    try:
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.write_text(DEFAULT_CLASSIFY_PROMPT_TEMPLATE, encoding="utf-8")
+    except Exception:
+        pass
+
+    return legacy_path
 
 
 def _load_config() -> Dict[str, str]:
@@ -92,11 +156,16 @@ def _save_config(data: Dict[str, str]) -> None:
 
 def get_classify_prompt_path() -> Path:
     """Return editable system prompt file path for AI classification."""
-    return _get_classify_prompt_path()
+    return _ensure_classify_prompt_file()
+
+
+def ensure_classify_prompt_file() -> Path:
+    """Ensure editable classify prompt file exists and return its path."""
+    return _ensure_classify_prompt_file()
 
 
 def _read_prompt_template() -> str:
-    prompt_path = _get_classify_prompt_path()
+    prompt_path = _ensure_classify_prompt_file()
     if prompt_path.exists():
         try:
             content = prompt_path.read_text(encoding="utf-8").strip()
@@ -122,16 +191,13 @@ def _normalize_groups(groups: Sequence[str]) -> List[str]:
         seen.add(group_name)
         normalized.append(group_name)
 
-    if "未分类" not in seen:
-        normalized.append("未分类")
-
     return normalized
 
 
 def _build_groups_hint(groups: Sequence[str]) -> str:
     normalized_groups = _normalize_groups(groups)
     if not normalized_groups:
-        return "- 未分类"
+        return ""
     return "\n".join(f"- {group}" for group in normalized_groups)
 
 
@@ -279,10 +345,8 @@ def build_classify_system_prompt(groups: Sequence[str], max_groups: int = MAX_CL
     if GROUPS_PLACEHOLDER in template_with_max:
         prompt_body = template_with_max.replace(GROUPS_PLACEHOLDER, groups_hint)
     else:
-        prompt_body = f"{template_with_max.rstrip()}\n\n可优先复用的分组：\n{groups_hint}"
-
-    hard_constraints = HARD_CONSTRAINTS_TEMPLATE.replace(MAX_GROUPS_PLACEHOLDER, str(max_groups)).strip()
-    return f"{prompt_body.rstrip()}\n\n{hard_constraints}"
+        prompt_body = template_with_max
+    return prompt_body.rstrip()
 
 
 def load_ai_config() -> Tuple[str, str]:
@@ -483,6 +547,4 @@ def classify_repos(
         if progress_cb:
             progress_cb(idx, len(chunks))
 
-    repo_names = [str(repo.get("name", "")).strip() for repo in repos]
-    mapping = _post_process_mapping(mapping, repo_names, max_groups=max_groups)
     return mapping, ""

@@ -15,7 +15,10 @@ def get_script_dir() -> Path:
     """获取脚本所在目录"""
     # PyInstaller onefile：使用可执行文件所在目录
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent.resolve()
+        exe_dir = Path(sys.executable).parent.resolve()
+        if exe_dir.name.lower() == "dist":
+            return exe_dir.parent.resolve()
+        return exe_dir
 
     # 源码运行：使用项目根目录
     return Path(__file__).resolve().parents[3]
