@@ -68,5 +68,5 @@
 - get_jobs
 - repos-gui
 
-
-
+## rust rush
+- rust-rush
