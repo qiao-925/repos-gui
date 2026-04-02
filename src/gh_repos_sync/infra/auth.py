@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib import request, parse, error
 
-APP_NAME = "gh-repos-gui"
-SERVICE_NAME = "gh-repos-gui"
+APP_NAME = "CloneX"
+SERVICE_NAME = "CloneX"
 ACCOUNT_NAME = "token"
 DEFAULT_CLIENT_ID = "Ov23libZp6UizRJ9QUwD"
 
@@ -251,7 +251,7 @@ def fetch_user_profile(token: str) -> Tuple[Optional[str], int, str]:
             headers={
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token}",
-                "User-Agent": "gh-repos-gui"
+                "User-Agent": "CloneX"
             }
         )
         with request.urlopen(req, timeout=10) as resp:

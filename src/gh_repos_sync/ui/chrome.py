@@ -3,9 +3,9 @@
 import ctypes
 import sys
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
-from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
 
 
 def build_app_icon() -> QIcon:
@@ -15,14 +15,14 @@ def build_app_icon() -> QIcon:
     pixmap.fill(QColor("#1e1e1e"))
 
     painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setBrush(QColor("#4d7c8a"))
-    painter.setPen(Qt.NoPen)
+    painter.setPen(Qt.PenStyle.NoPen)
     painter.drawRoundedRect(6, 6, 52, 52, 10, 10)
 
     painter.setPen(QColor("#f0f0f0"))
-    painter.setFont(QFont("Segoe UI", 18, QFont.Bold))
-    painter.drawText(pixmap.rect(), Qt.AlignCenter, "GH")
+    painter.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "GH")
     painter.end()
 
     return QIcon(pixmap)
@@ -58,7 +58,7 @@ def make_section_header(title: str) -> QHBoxLayout:
 
     line = QFrame()
     line.setObjectName("divider")
-    line.setFrameShape(QFrame.HLine)
+    line.setFrameShape(QFrame.Shape.HLine)
     layout.addWidget(line, 1)
     return layout
 

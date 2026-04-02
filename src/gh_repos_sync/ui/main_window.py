@@ -9,14 +9,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import (
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeySequence
+from PyQt6.QtWidgets import (
     QApplication, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel,
     QLayout, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit,
-    QProgressBar, QPushButton, QShortcut, QSizePolicy, QSpinBox, QVBoxLayout,
+    QProgressBar, QPushButton, QSizePolicy, QSpinBox, QVBoxLayout,
     QWidget
 )
+from PyQt6.QtGui import QShortcut
 
 if hasattr(Qt, "AA_EnableHighDpiScaling"):
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
@@ -35,6 +36,7 @@ from ..core.repo_config import read_owner, write_owner
 from ..infra import ai, auth
 from ..infra.logger import get_log_file_path
 from .chrome import apply_windows_dark_titlebar, build_app_icon, make_section_header
+from .gist_manager_dialog import GistManagerDialog
 from .theme import build_custom_stylesheet
 from .workers import (
     AiGenerateWorker, ApplyWorker, AuthWorker, CloneWorker, PullWorker,
@@ -236,7 +238,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """初始化界面"""
-        self.setWindowTitle("GitHub 仓库管理工具")
+        self.setWindowTitle("CloneX - GitHub 仓库管理工具")
         self.setMinimumSize(800, 780)
         self.setWindowIcon(build_app_icon())
         apply_windows_dark_titlebar(self)
@@ -251,24 +253,24 @@ class MainWindow(QMainWindow):
 
         # 标题区域
         title_frame = QFrame()
-        title_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        title_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.title_layout = QVBoxLayout()
-        self.title_layout.setSizeConstraint(QLayout.SetMinimumSize)
+        self.title_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.title_layout.setContentsMargins(0, 2, 0, 10)
         self.title_layout.setSpacing(4)
         title_frame.setLayout(self.title_layout)
 
-        self.title_label = QLabel("GitHub 仓库管理工具")
-        self.title_label.setAlignment(Qt.AlignHCenter)
+        self.title_label = QLabel("CloneX")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.title_label.setObjectName("app-title")
-        self.title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.title_label.setMinimumHeight(32)
         self.title_layout.addWidget(self.title_label)
 
         self.subtitle_label = QLabel("同步 / 批量克隆 / 完整性检查")
-        self.subtitle_label.setAlignment(Qt.AlignHCenter)
+        self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.subtitle_label.setObjectName("app-subtitle")
-        self.subtitle_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.subtitle_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.subtitle_label.setMinimumHeight(20)
         self.title_layout.addWidget(self.subtitle_label)
 
@@ -286,17 +288,17 @@ class MainWindow(QMainWindow):
 
         self.refresh_btn = QPushButton("刷新信息")
         self.refresh_btn.clicked.connect(self.refresh_profile)
-        self.refresh_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.refresh_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.auth_layout.addWidget(self.refresh_btn)
 
         self.login_btn = QPushButton("登录 GitHub")
         self.login_btn.clicked.connect(self.start_login)
-        self.login_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.login_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.auth_layout.addWidget(self.login_btn)
 
         self.logout_btn = QPushButton("退出登录")
         self.logout_btn.clicked.connect(self.logout)
-        self.logout_btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.logout_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.auth_layout.addWidget(self.logout_btn)
 
         self.main_layout.addLayout(self.auth_layout)
@@ -321,30 +323,37 @@ class MainWindow(QMainWindow):
         self.ai_generate_btn = QPushButton("AI 自动分类（全量重建）")
         self.ai_generate_btn.clicked.connect(self.start_ai_generate)
         self.ai_generate_btn.setMinimumHeight(34)
-        self.ai_generate_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.ai_generate_btn.setCursor(Qt.PointingHandCursor)
+        self.ai_generate_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ai_generate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.classify_layout.addWidget(self.ai_generate_btn, 1)
 
         self.incremental_btn = QPushButton("增量更新到未分类（推荐）")
         self.incremental_btn.clicked.connect(self.start_incremental_update)
         self.incremental_btn.setMinimumHeight(34)
-        self.incremental_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.incremental_btn.setCursor(Qt.PointingHandCursor)
+        self.incremental_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.incremental_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.classify_layout.addWidget(self.incremental_btn, 1)
 
         self.open_file_btn = QPushButton("手动编辑")
         self.open_file_btn.clicked.connect(self.open_repo_groups_file)
         self.open_file_btn.setMinimumHeight(34)
-        self.open_file_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.open_file_btn.setCursor(Qt.PointingHandCursor)
+        self.open_file_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.open_file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.classify_layout.addWidget(self.open_file_btn, 1)
 
         self.open_prompt_btn = QPushButton("编辑 AI Prompt")
         self.open_prompt_btn.clicked.connect(self.open_ai_prompt_file)
         self.open_prompt_btn.setMinimumHeight(34)
-        self.open_prompt_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.open_prompt_btn.setCursor(Qt.PointingHandCursor)
+        self.open_prompt_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.open_prompt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.classify_layout.addWidget(self.open_prompt_btn, 1)
+
+        self.gist_manager_btn = QPushButton("Gist 配置管理")
+        self.gist_manager_btn.clicked.connect(self.open_gist_manager)
+        self.gist_manager_btn.setMinimumHeight(34)
+        self.gist_manager_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.gist_manager_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.classify_layout.addWidget(self.gist_manager_btn, 1)
 
         self.main_layout.addLayout(self.classify_layout)
 
@@ -361,25 +370,25 @@ class MainWindow(QMainWindow):
 
         self.params_frame = QFrame()
         self.params_layout = QFormLayout()
-        self.params_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.params_layout.setFormAlignment(Qt.AlignLeft)
+        self.params_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.params_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
         self.params_layout.setHorizontalSpacing(20)
         self.params_layout.setVerticalSpacing(18)
         self.params_layout.setContentsMargins(12, 12, 12, 8)
-        self.params_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.params_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.params_frame.setLayout(self.params_layout)
 
         self.tasks_spin = QSpinBox()
         self.tasks_spin.setRange(1, 64)
         self.tasks_spin.setValue(DEFAULT_TASKS)
         self.tasks_spin.setMinimumHeight(42)
-        self.tasks_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tasks_spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.connections_spin = QSpinBox()
         self.connections_spin.setRange(1, 64)
         self.connections_spin.setValue(DEFAULT_CONNECTIONS)
         self.connections_spin.setMinimumHeight(42)
-        self.connections_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.connections_spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.params_layout.addRow("并行任务数", self.tasks_spin)
         self.params_layout.addRow("并行连接数", self.connections_spin)
@@ -403,22 +412,22 @@ class MainWindow(QMainWindow):
         self.clone_btn = QPushButton("开始克隆")
         self.clone_btn.clicked.connect(self.start_clone)
         self.clone_btn.setMinimumHeight(36)
-        self.clone_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.clone_btn.setCursor(Qt.PointingHandCursor)
+        self.clone_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.clone_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.actions_layout.addWidget(self.clone_btn, 1)
 
         self.pull_btn = QPushButton("批量更新已克隆仓库")
         self.pull_btn.clicked.connect(self.start_pull)
         self.pull_btn.setMinimumHeight(36)
-        self.pull_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.pull_btn.setCursor(Qt.PointingHandCursor)
+        self.pull_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.pull_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.actions_layout.addWidget(self.pull_btn, 1)
 
         self.retry_failed_btn = QPushButton("一键重试失败仓库")
         self.retry_failed_btn.clicked.connect(self.retry_failed_repos)
         self.retry_failed_btn.setMinimumHeight(36)
-        self.retry_failed_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.retry_failed_btn.setCursor(Qt.PointingHandCursor)
+        self.retry_failed_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.retry_failed_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.actions_layout.addWidget(self.retry_failed_btn, 1)
 
         self.main_layout.addLayout(self.actions_layout)
@@ -452,7 +461,7 @@ class MainWindow(QMainWindow):
 
         self.log_panel = QFrame()
         self.log_panel.setObjectName("log-panel")
-        self.log_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.log_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.log_panel_layout = QVBoxLayout()
         self.log_panel_layout.setContentsMargins(12, 12, 12, 12)
@@ -481,7 +490,7 @@ class MainWindow(QMainWindow):
         self.log_text = QPlainTextEdit()
         self.log_text.setObjectName("log-view")
         self.log_text.setReadOnly(True)
-        self.log_text.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.log_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.log_text.setUndoRedoEnabled(False)
         self.log_text.setCenterOnScroll(False)
         self.log_text.setPlaceholderText("运行日志会显示在这里。")
@@ -497,6 +506,11 @@ class MainWindow(QMainWindow):
         self.pull_btn.setEnabled(not busy)
         self.retry_failed_btn.setEnabled(not busy)
         self.login_btn.setEnabled(not busy)
+        self.ai_generate_btn.setEnabled(not busy)
+        self.incremental_btn.setEnabled(not busy)
+        self.open_file_btn.setEnabled(not busy)
+        self.open_prompt_btn.setEnabled(not busy)
+        self.gist_manager_btn.setEnabled(not busy)
         self.refresh_btn.setEnabled(not busy and bool(self.token))
         self.logout_btn.setEnabled(not busy and bool(self.token))
         self.ai_generate_btn.setEnabled(not busy)
@@ -668,6 +682,11 @@ class MainWindow(QMainWindow):
     def open_ai_prompt_file(self):
         prompt_path = ai.ensure_classify_prompt_file()
         self._open_local_path(prompt_path)
+
+    def open_gist_manager(self):
+        """Open Gist configuration manager dialog."""
+        dialog = GistManagerDialog(self)
+        dialog.exec_()
 
     def open_log_file(self):
         self._open_local_path(get_log_file_path())

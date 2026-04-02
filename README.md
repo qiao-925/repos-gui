@@ -1,4 +1,4 @@
-# GitHub 仓库批量管理工具（GUI）
+# CloneX - GitHub 仓库批量管理工具 (GUI)
 
 用于 GitHub 仓库批量管理的桌面 GUI 工具，提供仓库同步、分类维护、批量克隆、批量更新和失败重试能力。减少重复命令操作，提升多仓库日常维护效率。
 
@@ -14,7 +14,7 @@
 
 ```bash
 uv sync --group build
-uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
+uv run pyinstaller --noconfirm --clean --onefile --windowed --name CloneX --paths src gui.py
 ```
 
 ### 启动
@@ -22,13 +22,13 @@ uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui 
 **Windows**
 
 ```powershell
-.\dist\gh-repos-gui.exe
+.\dist\CloneX.exe
 ```
 
 **Linux / macOS**
 
 ```bash
-chmod +x ./dist/gh-repos-gui && ./dist/gh-repos-gui
+chmod +x ./dist/CloneX && ./dist/CloneX
 ```
 
 ## 项目结构
@@ -36,7 +36,7 @@ chmod +x ./dist/gh-repos-gui && ./dist/gh-repos-gui
 ```text
 .
 ├─ gui.py                           # GUI 启动入口（开发运行）
-├─ gh-repos-gui.spec                # PyInstaller 构建配置
+├─ CloneX.spec                       # PyInstaller 构建配置
 ├─ scripts/
 │  ├─ rebuild-run.ps1               # 一键重打包并运行（Windows）
 │  └─ watch-rebuild-run.ps1         # 监听文件变化后重打包运行

@@ -2,7 +2,7 @@
 
 from typing import Dict, List
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 
 from ..application.ai_generation import generate_repo_groups_with_ai
 from ..application.execution import run_clone_and_check, run_pull_updates

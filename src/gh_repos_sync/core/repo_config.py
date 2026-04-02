@@ -14,7 +14,8 @@ from ..domain.repo_groups import (
     render_repo_groups_text,
 )
 from ..infra.github_api import fetch_public_repos
-from ..infra.logger import log_error, log_info, log_success
+from ..infra.gist_config import gist_manager
+from ..infra.logger import log_error, log_info, log_success, log_warning
 from ..infra.paths import REPOS_DIR, SCRIPT_DIR
 
 # 默认配置文件
@@ -335,6 +336,94 @@ def apply_sync(config_file: str, new_repos: List[str]) -> Tuple[bool, str]:
     return True, ""
 
 
+def load_config_from_gist(gist_id: str, filename: str = "REPO-GROUPS.md", 
+                         token: Optional[str] = None, force_refresh: bool = False) -> Tuple[bool, str, str]:
+    """Load configuration from GitHub Gist."""
+    success, content, error = gist_manager.download_config(gist_id, filename, token, force_refresh)
+    if not success:
+        return False, "", error
+    
+    # 验证配置内容
+    try:
+        extract_owner(content)
+        parse_groups_and_tags(content)
+    except ValueError as e:
+        return False, "", f"Gist 配置格式错误: {e}"
+    
+    return True, content, ""
+
+
+def save_config_to_gist(config_file: str, gist_id: str, filename: str = "REPO-GROUPS.md",
+                       token: Optional[str] = None, description: Optional[str] = None) -> Tuple[bool, str]:
+    """Save local configuration to GitHub Gist."""
+    config_path = resolve_config_path(config_file)
+    if not config_path.exists():
+        return False, f"本地配置文件不存在: {config_path}"
+    
+    try:
+        content, _, _, _ = read_text_preserve_encoding(config_path)
+    except Exception as exc:
+        return False, f"读取本地配置失败: {exc}"
+    
+    return gist_manager.upload_config(gist_id, content, filename, token, description)
+
+
+def create_gist_from_config(config_file: str, filename: str = "REPO-GROUPS.md",
+                           token: Optional[str] = None, description: Optional[str] = None,
+                           public: bool = False) -> Tuple[bool, str, str]:
+    """Create a new Gist from local configuration."""
+    config_path = resolve_config_path(config_file)
+    if not config_path.exists():
+        return False, "", f"本地配置文件不存在: {config_path}"
+    
+    try:
+        content, _, _, _ = read_text_preserve_encoding(config_path)
+    except Exception as exc:
+        return False, "", f"读取本地配置失败: {exc}"
+    
+    return gist_manager.create_gist(content, filename, token, description, public)
+
+
+def sync_config_from_gist(config_file: str, gist_id: str, filename: str = "REPO-GROUPS.md",
+                         token: Optional[str] = None, backup: bool = True) -> Tuple[bool, str]:
+    """Sync configuration from Gist to local file."""
+    # 备份本地文件
+    config_path = resolve_config_path(config_file)
+    if backup and config_path.exists():
+        backup_path = config_path.with_suffix(f"{config_path.suffix}.backup")
+        try:
+            import shutil
+            shutil.copy2(config_path, backup_path)
+            log_info(f"已备份本地配置到: {backup_path}")
+        except Exception as e:
+            log_warning(f"备份本地配置失败: {e}")
+    
+    # 从 Gist 下载
+    success, content, error = load_config_from_gist(gist_id, filename, token)
+    if not success:
+        return False, error
+    
+    # 写入本地文件
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        write_text_preserve_encoding(config_path, content, "utf-8", "\n", True)
+    except Exception as exc:
+        return False, f"写入本地配置失败: {exc}"
+    
+    log_success(f"已从 Gist 同步配置到: {config_path}")
+    return True, ""
+
+
+def get_gist_cache_info() -> Dict[str, Dict]:
+    """Get cached Gist configurations information."""
+    return gist_manager.get_cached_configs()
+
+
+def clear_gist_cache(gist_id: Optional[str] = None, filename: Optional[str] = None) -> None:
+    """Clear Gist cache."""
+    gist_manager.clear_cache(gist_id, filename)
+
+
 __all__ = [
     "CONFIG_FILE",
     "REPO_OWNER",
@@ -354,4 +443,10 @@ __all__ = [
     "write_owner",
     "preview_sync",
     "apply_sync",
+    "load_config_from_gist",
+    "save_config_to_gist",
+    "create_gist_from_config",
+    "sync_config_from_gist",
+    "get_gist_cache_info",
+    "clear_gist_cache",
 ]

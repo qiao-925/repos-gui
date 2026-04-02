@@ -38,7 +38,7 @@ LOG_CALLBACK: Optional[Callable[[str, str, str], None]] = None
 LOG_TO_STDOUT = True
 LOG_TO_STDERR = True
 LOG_DIR = SCRIPT_DIR / "logs"
-LOG_FILE = LOG_DIR / "gh-repos-gui.log"
+LOG_FILE = LOG_DIR / "CloneX.log"
 
 
 def get_log_state() -> Tuple[Optional[Callable[[str, str, str], None]], bool, bool]:

@@ -27,3 +27,6 @@ build/
 repos
 
 failed-repos.txt
+
+# 私有配置文件
+REPO-GROUPS.md

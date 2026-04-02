@@ -1,0 +1,75 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            ext: .exe
+            build_cmd: .\dist\gh-repos-gui.exe
+          - os: macos-latest
+            name: macos
+            ext: ''
+            build_cmd: ./dist/gh-repos-gui
+          - os: ubuntu-latest
+            name: linux
+            ext: ''
+            build_cmd: ./dist/gh-repos-gui
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python
+      run: uv python install
+
+    - name: Install dependencies
+      run: |
+        uv sync --group build
+
+    - name: Build with PyInstaller
+      run: |
+        uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gh-repos-gui-${{ matrix.name }}
+        path: dist/gh-repos-gui${{ matrix.ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/gh-repos-gui-windows/gh-repos-gui.exe
+          artifacts/gh-repos-gui-macos/gh-repos-gui
+          artifacts/gh-repos-gui-linux/gh-repos-gui
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

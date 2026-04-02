@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "github-repos-clone"
+name = "clonex"
 version = "1.0.0"
-description = "GitHub 仓库批量分类克隆 GUI"
+description = "CloneX: GitHub 仓库批量分类克隆与管理工具"
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [{ name = "qiao-925" }]
@@ -23,7 +23,11 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-  "PyQt5>=5.15.0",
+  "PyQt6>=6.6.0",
+  "PyQt6-WebEngine>=6.6.0",
+  "pygithub>=2.2.0",
+  "requests>=2.31.0",
+  "chardet>=5.0.0",
   "qt-material>=2.14",
   "keyring>=25.0",
   "colorama>=0.4.6; platform_system == 'Windows'",
@@ -33,7 +37,7 @@ dependencies = [
 Homepage = "https://github.com/qiao-925/repos-gui"
 
 [project.scripts]
-gh-repos-gui = "gh_repos_sync.ui.main_window:main"
+clonex = "gh_repos_sync.ui.main_window:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -48,6 +52,3 @@ build = [
 
 [tool.uv]
 default-groups = []
-required-environments = [
-  "sys_platform == 'win32'",
-]

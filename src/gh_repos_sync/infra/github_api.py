@@ -18,7 +18,7 @@ def fetch_public_repos(
     while True:
         url = f"https://api.github.com/users/{owner}/repos?per_page={per_page}&page={page}"
         headers = {
-            "User-Agent": "gh-repos-gui",
+            "User-Agent": "CloneX",
             "Accept": "application/vnd.github+json",
         }
         if token:

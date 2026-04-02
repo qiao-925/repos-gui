@@ -14,8 +14,8 @@ from .paths import SCRIPT_DIR
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
 
-APP_NAME = "gh-repos-gui"
-SERVICE_NAME = "gh-repos-gui"
+APP_NAME = "CloneX"
+SERVICE_NAME = "CloneX"
 ACCOUNT_NAME = "deepseek_api_key"
 CLASSIFY_PROMPT_FILE = "ai_classify_system_prompt.txt"
 GROUPS_PLACEHOLDER = "{{ALLOWED_GROUPS}}"
