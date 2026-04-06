@@ -114,13 +114,19 @@ jobs:
       with:
         path: artifacts
 
+    - name: Rename artifacts with platform suffix
+      run: |
+        mv artifacts/CloneX-windows/CloneX.exe artifacts/CloneX-windows.exe
+        mv artifacts/CloneX-macos/CloneX       artifacts/CloneX-macos
+        mv artifacts/CloneX-linux/CloneX        artifacts/CloneX-linux
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          artifacts/CloneX-windows/CloneX.exe
-          artifacts/CloneX-macos/CloneX
-          artifacts/CloneX-linux/CloneX
+          artifacts/CloneX-windows.exe
+          artifacts/CloneX-macos
+          artifacts/CloneX-linux
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
