@@ -72,7 +72,7 @@ class AuthWorker(QThread):
         self.client_id = client_id
 
     def run(self):
-        success, data, error = auth.request_device_code(self.client_id)
+        success, data, error = auth.request_device_code(self.client_id, scope="repo,gist")
         if not success:
             self.finished.emit(False, "", "", -1, error)
             return

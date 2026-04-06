@@ -108,7 +108,7 @@ class GistManagerDialog(QDialog):
         token_layout = QFormLayout()
         
         self.token_edit = QLineEdit()
-        self.token_edit.setEchoMode(QLineEdit.Password)
+        self.token_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_edit.setPlaceholderText("可选，用于私有 Gist 或提高限制")
         
         token_layout.addRow("GitHub Token:", self.token_edit)
@@ -166,7 +166,6 @@ class GistManagerDialog(QDialog):
         
         # 添加到主布局
         layout.addWidget(url_group)
-        layout.addWidget(token_group)
         layout.addWidget(action_group)
         layout.addWidget(preview_group)
         layout.addWidget(cache_group)
@@ -190,8 +189,7 @@ class GistManagerDialog(QDialog):
         if not gist_id:
             return
         
-        token = self.token_edit.text().strip() or None
-        self.start_worker("download", gist_id=gist_id, token=token)
+        self.start_worker("download", gist_id=gist_id)
     
     def upload_to_gist(self):
         """Upload configuration to Gist."""
@@ -199,12 +197,7 @@ class GistManagerDialog(QDialog):
         if not gist_id:
             return
         
-        token = self.token_edit.text().strip()
-        if not token:
-            QMessageBox.warning(self, "警告", "上传配置需要 GitHub Token")
-            return
-        
-        self.start_worker("upload", gist_id=gist_id, token=token)
+        self.start_worker("upload", gist_id=gist_id)
     
     def sync_from_gist(self):
         """Sync configuration from Gist."""
@@ -212,16 +205,10 @@ class GistManagerDialog(QDialog):
         if not gist_id:
             return
         
-        token = self.token_edit.text().strip() or None
-        self.start_worker("sync", gist_id=gist_id, token=token)
+        self.start_worker("sync", gist_id=gist_id)
     
     def create_new_gist(self):
         """Create a new Gist."""
-        token = self.token_edit.text().strip()
-        if not token:
-            QMessageBox.warning(self, "警告", "创建 Gist 需要 GitHub Token")
-            return
-        
         # 询问是否公开
         public = QMessageBox.question(
             self, "选择类型", 
@@ -230,7 +217,7 @@ class GistManagerDialog(QDialog):
             QMessageBox.No
         ) == QMessageBox.Yes
         
-        self.start_worker("create", token=token, public=public)
+        self.start_worker("create", public=public)
     
     def extract_gist_id(self):
         """Extract Gist ID from URL."""
@@ -304,7 +291,6 @@ class GistManagerDialog(QDialog):
     def set_ui_enabled(self, enabled: bool):
         """Enable/disable UI elements."""
         self.gist_url_edit.setEnabled(enabled)
-        self.token_edit.setEnabled(enabled)
         self.validate_btn.setEnabled(enabled)
         self.download_btn.setEnabled(enabled)
         self.upload_btn.setEnabled(enabled)

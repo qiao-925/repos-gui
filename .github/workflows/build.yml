@@ -42,13 +42,13 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        uv run pyinstaller --noconfirm --clean --onefile --windowed --name CloneX --paths src gui.py
+        uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: CloneX-${{ matrix.name }}
-        path: dist/CloneX${{ matrix.ext }}
+        name: gh-repos-gui-${{ matrix.name }}
+        path: dist/gh-repos-gui${{ matrix.ext }}
 
   release:
     needs: build
@@ -69,9 +69,9 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          artifacts/CloneX-windows/CloneX.exe
-          artifacts/CloneX-macos/CloneX
-          artifacts/CloneX-linux/CloneX
+          artifacts/gh-repos-gui-windows/gh-repos-gui.exe
+          artifacts/gh-repos-gui-macos/gh-repos-gui
+          artifacts/gh-repos-gui-linux/gh-repos-gui
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

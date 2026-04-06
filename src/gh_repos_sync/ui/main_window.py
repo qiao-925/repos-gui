@@ -34,9 +34,11 @@ from ..core import repo_config
 from ..core.process_control import request_shutdown
 from ..core.repo_config import read_owner, write_owner
 from ..infra import ai, auth
+from ..infra.auto_gist_sync import get_auto_gist_sync
 from ..infra.logger import get_log_file_path
 from .chrome import apply_windows_dark_titlebar, build_app_icon, make_section_header
 from .gist_manager_dialog import GistManagerDialog
+from .auto_sync_dialog import AutoSyncDialog
 from .theme import build_custom_stylesheet
 from .workers import (
     AiGenerateWorker, ApplyWorker, AuthWorker, CloneWorker, PullWorker,
@@ -82,6 +84,9 @@ class MainWindow(QMainWindow):
         self.ui_scale = DEFAULT_UI_SCALE
         self.current_execution_label = "克隆"
         self.startup_notices.append(f"详细日志文件：{get_log_file_path()}")
+        
+        # 初始化自动 Gist 同步
+        self.auto_gist_sync = get_auto_gist_sync(self.config_file)
 
         self.init_ui()
         self._setup_zoom_shortcuts()
@@ -127,8 +132,8 @@ class MainWindow(QMainWindow):
         return max(1, int(round(value * self.ui_scale)))
 
     def _setup_zoom_shortcuts(self) -> None:
-        self.zoom_in_shortcut = QShortcut(QKeySequence.ZoomIn, self)
-        self.zoom_out_shortcut = QShortcut(QKeySequence.ZoomOut, self)
+        self.zoom_in_shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.ZoomIn), self)
+        self.zoom_out_shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.ZoomOut), self)
         self.zoom_reset_shortcut = QShortcut(QKeySequence("Ctrl+0"), self)
         self.zoom_in_shortcut_alt = QShortcut(QKeySequence("Ctrl+="), self)
 
@@ -348,12 +353,12 @@ class MainWindow(QMainWindow):
         self.open_prompt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.classify_layout.addWidget(self.open_prompt_btn, 1)
 
-        self.gist_manager_btn = QPushButton("Gist 配置管理")
-        self.gist_manager_btn.clicked.connect(self.open_gist_manager)
-        self.gist_manager_btn.setMinimumHeight(34)
-        self.gist_manager_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.gist_manager_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.classify_layout.addWidget(self.gist_manager_btn, 1)
+        self.auto_sync_btn = QPushButton("Gist 自动同步")
+        self.auto_sync_btn.clicked.connect(self.open_auto_sync_settings)
+        self.auto_sync_btn.setMinimumHeight(34)
+        self.auto_sync_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.auto_sync_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.classify_layout.addWidget(self.auto_sync_btn, 1)
 
         self.main_layout.addLayout(self.classify_layout)
 
@@ -510,7 +515,7 @@ class MainWindow(QMainWindow):
         self.incremental_btn.setEnabled(not busy)
         self.open_file_btn.setEnabled(not busy)
         self.open_prompt_btn.setEnabled(not busy)
-        self.gist_manager_btn.setEnabled(not busy)
+        self.auto_sync_btn.setEnabled(not busy)
         self.refresh_btn.setEnabled(not busy and bool(self.token))
         self.logout_btn.setEnabled(not busy and bool(self.token))
         self.ai_generate_btn.setEnabled(not busy)
@@ -650,6 +655,12 @@ class MainWindow(QMainWindow):
         if login:
             auth.save_cached_login(login)
 
+        # 更新自动同步实例
+        self.update_auto_sync_token(token)
+        
+        # 登录成功后自动初始化 Gist 同步（无感发现或准备创建）
+        self.auto_gist_sync.auto_init_sync(token)
+
         self._update_auth_status()
         if error:
             QMessageBox.warning(self, "⚠️ 授权提示", error)
@@ -686,7 +697,97 @@ class MainWindow(QMainWindow):
     def open_gist_manager(self):
         """Open Gist configuration manager dialog."""
         dialog = GistManagerDialog(self)
-        dialog.exec_()
+        dialog.exec()
+
+    def open_auto_sync_settings(self):
+        """Open auto sync settings dialog."""
+        dialog = AutoSyncDialog(self, self.auto_gist_sync)
+        dialog.sync_requested.connect(self.handle_sync_request)
+        dialog.exec()
+
+    def handle_sync_request(self, action: str, description: str):
+        """Handle manual sync request from auto sync dialog."""
+        if action == "upload":
+            self.sync_config_to_gist_now()
+        elif action == "download":
+            self.sync_config_from_gist_now()
+
+    def enable_auto_gist_sync(self, gist_id: str):
+        """Enable automatic Gist synchronization."""
+        if not self.token:
+            QMessageBox.warning(self, "警告", "需要登录 GitHub 才能启用自动同步")
+            return
+        
+        success, message = self.auto_gist_sync.enable_auto_sync(
+            gist_id, 
+            auto_upload=True, 
+            auto_download=True
+        )
+        
+        if success:
+            QMessageBox.information(self, "成功", message)
+            self.log(f"🔄 {message}")
+        else:
+            QMessageBox.warning(self, "错误", message)
+            self.log(f"❌ 启用自动同步失败: {message}")
+
+    def disable_auto_gist_sync(self):
+        """Disable automatic Gist synchronization."""
+        self.auto_gist_sync.disable_auto_sync()
+        QMessageBox.information(self, "成功", "已禁用自动同步")
+        self.log("🔄 已禁用自动同步")
+
+    def get_auto_sync_status(self):
+        """Get current auto-sync status."""
+        status = self.auto_gist_sync.get_status()
+        
+        status_text = "自动同步状态:\n\n"
+        status_text += f"启用状态: {'✅ 已启用' if status['enabled'] else '❌ 未启用'}\n"
+        status_text += f"Gist ID: {status['gist_id'] or '未配置'}\n"
+        status_text += f"自动上传: {'✅' if status['auto_upload'] else '❌'}\n"
+        status_text += f"自动下载: {'✅' if status['auto_download'] else '❌'}\n"
+        
+        if status['last_sync'] > 0:
+            from datetime import datetime
+            last_sync_time = datetime.fromtimestamp(status['last_sync']).strftime("%Y-%m-%d %H:%M:%S")
+            status_text += f"上次同步: {last_sync_time}\n"
+        
+        return status_text
+
+    def sync_config_to_gist_now(self):
+        """Manually trigger configuration sync to Gist."""
+        if not self.auto_gist_sync.is_enabled():
+            QMessageBox.information(self, "提示", "请先启用自动同步功能")
+            return
+        
+        self.set_busy(True, "状态：正在同步配置到 Gist...")
+        success, message = self.auto_gist_sync.auto_upload_config()
+        self.set_busy(False, "状态：就绪")
+        
+        if success:
+            QMessageBox.information(self, "成功", message)
+            self.log(f"✅ {message}")
+        else:
+            QMessageBox.warning(self, "错误", message)
+            self.log(f"❌ 同步失败: {message}")
+
+    def sync_config_from_gist_now(self):
+        """Manually trigger configuration sync from Gist."""
+        if not self.auto_gist_sync.is_enabled():
+            QMessageBox.information(self, "提示", "请先启用自动同步功能")
+            return
+        
+        self.set_busy(True, "状态：正在从 Gist 同步配置...")
+        success, message = self.auto_gist_sync.auto_download_config()
+        self.set_busy(False, "状态：就绪")
+        
+        if success:
+            QMessageBox.information(self, "成功", message)
+            self.log(f"✅ {message}")
+            self._refresh_owner_label()
+        else:
+            QMessageBox.warning(self, "错误", message)
+            self.log(f"❌ 同步失败: {message}")
 
     def open_log_file(self):
         self._open_local_path(get_log_file_path())
@@ -832,6 +933,9 @@ class MainWindow(QMainWindow):
         self._refresh_owner_label()
         self._set_flow_hint("下一步：手动微调分类文件，然后开始克隆")
         self.open_repo_groups_file()
+        
+        # 触发自动同步
+        self._trigger_auto_sync_on_change()
 
     def _resolve_owner_for_sync(self) -> str:
         if not self.login_name:
@@ -951,6 +1055,9 @@ class MainWindow(QMainWindow):
         self.log(f"✅ 增量更新完成，成功写入 {len(self.new_repos)} 个仓库")
         self._set_flow_hint("下一步：手动微调分类文件，然后开始克隆")
         self.open_repo_groups_file()
+        
+        # 触发自动同步
+        self._trigger_auto_sync_on_change()
 
     def _set_progress(self, phase: str, done: int, total: int, success: int, fail: int):
         if total <= 0:
@@ -1139,13 +1246,32 @@ class MainWindow(QMainWindow):
         if stick_to_bottom or self.log_text.blockCount() <= 2:
             scroll_bar.setValue(scroll_bar.maximum())
 
+    def _trigger_auto_sync_on_change(self):
+        """Trigger auto sync when configuration changes."""
+        # 无需检查 is_enabled，内部会根据 Token 自动判断
+        
+        # 在后台线程中执行自动同步，避免阻塞 UI
+        try:
+            success, message = self.auto_gist_sync.sync_on_config_change()
+            if success:
+                self.log(f"🔄 [自动同步] {message}")
+            # 只有在真正发生错误或成功的操作时才记录，减少日志噪音
+        except Exception as e:
+            self.log(f"⚠️ 自动同步异常: {e}")
+
+    def update_auto_sync_token(self, new_token: str):
+        """Update auto sync instance with new token."""
+        self.auto_gist_sync = get_auto_gist_sync(self.config_file)
+        if self.auto_gist_sync.is_enabled():
+            self.log("🔄 已更新自动同步认证信息")
+
 
 
 def main():
     app = QApplication(sys.argv)
     window = MainWindow(app)
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == '__main__':

@@ -14,7 +14,7 @@
 
 ```bash
 uv sync --group build
-uv run pyinstaller --noconfirm --clean --onefile --windowed --name CloneX --paths src gui.py
+uv run pyinstaller --noconfirm --clean --onefile --windowed --name gh-repos-gui --paths src gui.py
 ```
 
 ### 启动
@@ -22,60 +22,71 @@ uv run pyinstaller --noconfirm --clean --onefile --windowed --name CloneX --path
 **Windows**
 
 ```powershell
-.\dist\CloneX.exe
+.\dist\gh-repos-gui.exe
 ```
 
 **Linux / macOS**
 
 ```bash
-chmod +x ./dist/CloneX && ./dist/CloneX
+chmod +x ./dist/gh-repos-gui && ./dist/gh-repos-gui
 ```
 
 ## 项目结构
 
 ```text
 .
-├─ gui.py                           # GUI 启动入口（开发运行）
-├─ CloneX.spec                       # PyInstaller 构建配置
+├─ gui.py                           # GUI 启动入口
+├─ ai_classify_system_prompt.txt    # AI 分类 Prompt（可编辑）
+├─ docs/                            # 文档与示例
+│  ├─ BUILD.md                      # 打包说明
+│  ├─ GIST-CONFIG-GUIDE.md         # Gist 配置说明
+│  ├─ REPO-GROUPS.md.example        # 分组文件示例
+│  └─ mcp_config_example.json      # MCP 配置示例
 ├─ scripts/
+│  ├─ inspect_ui.py                 # AT-SPI UI 自检脚本
+│  ├─ monitor_github.py             # GitHub Actions 监控
 │  ├─ rebuild-run.ps1               # 一键重打包并运行（Windows）
 │  └─ watch-rebuild-run.ps1         # 监听文件变化后重打包运行
 └─ src/
    └─ gh_repos_sync/
       ├─ ui/                        # 界面与交互层
       │  ├─ main_window.py          # 主窗口与主流程入口
-      │  ├─ workers.py              # 后台任务线程（避免阻塞 UI）
-      │  ├─ theme.py                # 主题样式配置
-      │  └─ chrome.py               # 窗口外观相关
+      │  ├─ workers.py              # 后台任务线程
+      │  ├─ auto_sync_dialog.py     # Gist 自动同步设置对话框
+      │  ├─ gist_manager_dialog.py  # Gist 管理对话框
+      │  ├─ theme.py                # 主题样式
+      │  └─ chrome.py               # 窗口外观
       ├─ application/               # 用例编排层
-      │  ├─ ai_generation.py        # AI 分类流程编排
-      │  └─ execution.py            # 克隆/更新执行流程编排
+      │  ├─ ai_generation.py        # AI 分类流程
+      │  └─ execution.py            # 克隆/更新执行流程
       ├─ core/                      # 核心能力层
-      │  ├─ repo_config.py          # 分组文件读取、写入与同步逻辑
+      │  ├─ repo_config.py          # 分组文件读写与 Gist 同步
       │  ├─ clone.py                # 单仓库克隆
       │  ├─ pull.py                 # 单仓库更新
       │  ├─ parallel.py             # 并行任务调度
-      │  ├─ check.py                # 仓库完整性校验（git fsck）
-      │  ├─ failed_repos.py         # 失败仓库记录与输出
+      │  ├─ check.py                # 仓库完整性校验
+      │  ├─ failed_repos.py         # 失败仓库记录
       │  └─ process_control.py      # 执行过程控制
       ├─ domain/                    # 领域规则层
-      │  ├─ models.py               # 领域模型定义
-      │  └─ repo_groups.py          # 分组解析与渲染规则
-      └─ infra/                     # 基础设施接入层
-         ├─ auth.py                 # GitHub 授权
-         ├─ github_api.py           # GitHub API 调用封装
-         ├─ ai.py                   # DeepSeek API 调用封装
-         ├─ logger.py               # 日志输出
-         └─ paths.py                # 运行路径与配置路径
+      │  ├─ models.py               # 领域模型
+      │  └─ repo_groups.py          # 分组解析与渲染
+      └─ infra/                     # 基础设施层
+         ├─ auth.py                 # GitHub OAuth 授权
+         ├─ github_api.py           # GitHub API 封装
+         ├─ gist_config.py          # Gist 配置管理
+         ├─ auto_gist_sync.py       # 自动 Gist 同步
+         ├─ ai.py                   # DeepSeek API 封装
+         ├─ logger.py               # 日志
+         └─ paths.py                # 运行路径
 ```
 
 依赖方向：`ui -> application -> core/domain -> infra`
 
 ## 依赖
 
-- Python `>=3.8`
-- `PyQt5`
-- `qt-material`
+- Python `>=3.11`
+- `PyQt6`, `PyQt6-WebEngine`
+- `pygithub`
+- `requests`
 - `keyring`
-- `colorama`（仅 Windows）
 - `pyinstaller`（仅打包时需要）

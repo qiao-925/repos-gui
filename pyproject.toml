@@ -31,6 +31,8 @@ dependencies = [
   "qt-material>=2.14",
   "keyring>=25.0",
   "colorama>=0.4.6; platform_system == 'Windows'",
+  "dogtail>=1.0.8",
+  "pygobject>=3.48.2",
 ]
 
 [project.urls]

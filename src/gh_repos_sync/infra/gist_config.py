@@ -7,6 +7,7 @@ from typing import Dict, Optional, Tuple
 
 import requests
 
+from .auth import load_token
 from .logger import log_error, log_info, log_success, log_warning
 from .paths import SCRIPT_DIR
 
@@ -40,13 +41,21 @@ class GistConfigManager:
         except Exception as e:
             log_error(f"保存 Gist 缓存失败: {e}")
     
+    def _get_token(self, provided_token: Optional[str] = None) -> Optional[str]:
+        """Get token from provided or auth module."""
+        if provided_token:
+            return provided_token
+        token, _ = load_token()
+        return token
+
     def _get_gist_content(self, gist_id: str, filename: str, token: Optional[str] = None) -> Tuple[bool, str, str]:
         """Download content from GitHub Gist."""
         url = f"https://api.github.com/gists/{gist_id}"
         headers = {"Accept": "application/vnd.github.v3+json"}
         
-        if token:
-            headers["Authorization"] = f"token {token}"
+        effective_token = self._get_token(token)
+        if effective_token:
+            headers["Authorization"] = f"token {effective_token}"
         
         try:
             response = requests.get(url, headers=headers, timeout=10)
@@ -101,13 +110,14 @@ class GistConfigManager:
     def upload_config(self, gist_id: str, content: str, filename: str = "REPO-GROUPS.md",
                      token: Optional[str] = None, description: Optional[str] = None) -> Tuple[bool, str]:
         """Upload configuration to GitHub Gist."""
-        if not token:
+        effective_token = self._get_token(token)
+        if not effective_token:
             return False, "上传配置需要 GitHub Token"
         
         url = f"https://api.github.com/gists/{gist_id}"
         headers = {
             "Accept": "application/vnd.github.v3+json",
-            "Authorization": f"token {token}",
+            "Authorization": f"token {effective_token}",
             "Content-Type": "application/json"
         }
         
@@ -152,13 +162,14 @@ class GistConfigManager:
                    token: Optional[str] = None, description: Optional[str] = None,
                    public: bool = False) -> Tuple[bool, str, str]:
         """Create a new Gist with configuration."""
-        if not token:
+        effective_token = self._get_token(token)
+        if not effective_token:
             return False, "", "创建 Gist 需要 GitHub Token"
         
         url = "https://api.github.com/gists"
         headers = {
             "Accept": "application/vnd.github.v3+json",
-            "Authorization": f"token {token}",
+            "Authorization": f"token {effective_token}",
             "Content-Type": "application/json"
         }
         
@@ -228,6 +239,43 @@ class GistConfigManager:
         self._save_cache()
         log_info("已清理 Gist 缓存")
     
+    def list_user_gists(self, token: Optional[str] = None) -> Tuple[bool, list, str]:
+        """List gists for the authenticated user."""
+        effective_token = self._get_token(token)
+        if not effective_token:
+            return False, [], "需要 GitHub Token 才能获取 Gist 列表"
+        
+        url = "https://api.github.com/gists"
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "Authorization": f"token {effective_token}"
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            gists = response.json()
+            return True, gists, ""
+            
+        except requests.exceptions.RequestException as e:
+            return False, [], f"获取 Gist 列表失败: {e}"
+        except Exception as e:
+            return False, [], f"解析 Gist 列表失败: {e}"
+
+    def find_config_gist(self, gists: list, filename: str = "REPO-GROUPS.md") -> Optional[Dict]:
+        """Find a gist that contains the specific configuration file."""
+        for gist in gists:
+            files = gist.get("files", {})
+            if filename in files:
+                return {
+                    "id": gist.get("id"),
+                    "url": gist.get("html_url"),
+                    "description": gist.get("description", ""),
+                    "updated_at": gist.get("updated_at")
+                }
+        return None
+
     def validate_gist_url(self, gist_url: str) -> Tuple[bool, str]:
         """Extract and validate Gist ID from URL."""
         if not gist_url:
