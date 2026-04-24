@@ -55,7 +55,7 @@ jobs:
           skip-existing: true
 
       - name: Publish to PyPI
-        if: (github.event_name == 'workflow_dispatch' && inputs.environment == 'pypi') || github.event_name == 'release'
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'pypi') || github.event_name == 'release'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           username: __token__
