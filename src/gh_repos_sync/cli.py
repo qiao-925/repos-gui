@@ -13,12 +13,13 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from .core.clone import clone_repo
+from .core.parallel import execute_parallel_clone
 from .infra import auth
 from .infra.github_api import fetch_owner_repos
 
 DEFAULT_OUTPUT_DIR = Path.cwd() / "clonex-repos"
-DEFAULT_PARALLEL_CONNECTIONS = 8
+DEFAULT_PARALLEL_TASKS = 10
+DEFAULT_PARALLEL_CONNECTIONS = 20
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         default=str(DEFAULT_OUTPUT_DIR),
         help=f"Output directory for cloned repositories (default: {DEFAULT_OUTPUT_DIR})",
+    )
+    parser.add_argument(
+        "--tasks",
+        type=int,
+        default=DEFAULT_PARALLEL_TASKS,
+        help=f"Parallel repository tasks (default: {DEFAULT_PARALLEL_TASKS})",
     )
     parser.add_argument(
         "--connections",
@@ -94,26 +101,30 @@ def main(argv: Optional[list[str]] = None) -> int:
     print(f"output={output_dir}")
     print(f"repos={len(repos)}")
 
-    success_count = 0
-    fail_count = 0
+    tasks = []
+    invalid_repo_count = 0
     for repo in repos:
         repo_name = str(repo.get("name") or "").strip()
         repo_full = f"{owner}/{repo_name}" if repo_name else ""
         if not repo_name:
-            fail_count += 1
+            invalid_repo_count += 1
             continue
-
-        ok = clone_repo(
-            repo_full=repo_full,
-            repo_name=repo_name,
-            group_folder=str(output_dir),
-            parallel_connections=args.connections,
-            token=token,
+        tasks.append(
+            {
+                "repo_full": repo_full,
+                "repo_name": repo_name,
+                "group_folder": str(output_dir),
+                "group_name": owner,
+            }
         )
-        if ok:
-            success_count += 1
-        else:
-            fail_count += 1
+
+    success_count, fail_count, _ = execute_parallel_clone(
+        tasks=tasks,
+        parallel_tasks=args.tasks,
+        parallel_connections=args.connections,
+        token=token,
+    )
+    fail_count += invalid_repo_count
 
     return _print_result(success_count, fail_count, len(repos))
 

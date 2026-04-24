@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish Package
 
 on:
   workflow_dispatch:
@@ -13,6 +13,9 @@ on:
           - pypi
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   publish:
@@ -34,6 +37,12 @@ jobs:
 
       - name: Build distribution
         run: uv build
+
+      - name: Rename package artifacts for release tags
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p release-assets
+          cp dist/* release-assets/
 
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.environment == 'testpypi'
