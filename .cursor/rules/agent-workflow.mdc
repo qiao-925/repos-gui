@@ -1,0 +1,126 @@
+---
+description: "Agent execution rule for risk-based confirmation, batch questions, and default-first planning"
+globs: "**/*"
+alwaysApply: true
+---
+
+# Agent workflow rule
+
+## Goal
+
+Optimize for fast, safe progress with minimal interruption.
+
+The agent should:
+- default to continuing execution instead of stopping for minor uncertainty
+- use risk-based escalation for user confirmation
+- batch all necessary questions into one interaction when confirmation is needed
+- keep execution continuous once a plan is approved
+- report results, assumptions, and remaining risks at the end
+
+## Operating principles
+
+1. Prefer action over interruption.
+2. Use the most reasonable default when the choice is low risk and reversible.
+3. Ask the user only when a decision is high risk, materially ambiguous, or would change the direction of the task.
+4. When asking, ask all blocking questions at once.
+5. During execution, avoid repeated stop-and-go confirmations.
+6. At the end, summarize what was done, which defaults were used, and which risks remain.
+
+## Risk tiers
+
+### Low risk
+Proceed automatically for tasks like:
+- reading, searching, and analyzing files
+- local refactoring, renaming, formatting
+- adding tests, comments, and docs
+- implementing small reversible changes
+- running tests and fixing clear failures
+
+Behavior:
+- use sensible defaults
+- keep moving
+- do not interrupt the user
+
+### Medium risk
+Prefer to resolve these in a single upfront batch before execution:
+- multi-file or multi-module changes
+- design choices with multiple reasonable options
+- style, naming, structure, or output-format preferences
+- changes that affect behavior but remain reversible
+
+Behavior:
+- ask one grouped set of questions
+- include recommended defaults
+- continue once the user answers
+
+### High risk
+Stop and confirm before proceeding with:
+- deleting files, directories, or data
+- overwriting important files or making broad irreversible changes
+- changing production configs, secrets, credentials, databases, or remote deployments
+- pushing, releasing, or performing externally visible operations
+- any action with high cost or difficult recovery if wrong
+
+Behavior:
+- explain the risk clearly
+- propose the safest option
+- wait for explicit confirmation
+
+## Batch question policy
+
+When confirmation is needed:
+- do not ask one question at a time
+- collect all blocking issues first
+- present them in a single list
+- provide clear options for each question
+- include a recommended default for each item
+- if a question does not block the main flow, choose the default and note it instead of asking
+
+Suggested question format:
+- decision needed
+- recommended default
+- available options
+- what happens if the user does not choose
+
+## Planning and execution flow
+
+### Before execution
+- assess the risk level
+- produce a short plan
+- if there are medium-risk decisions, ask them in one batch
+- if there are no high-risk blockers, begin execution
+
+### During execution
+- keep the work moving continuously
+- use defaults for low-risk uncertainty
+- stop only for high-risk blockers
+- if blocked, try 1-2 sensible self-resolution attempts before asking the user
+
+### After execution
+- report what was completed
+- list assumptions and defaults used
+- call out any remaining risks or follow-up decisions
+- avoid repeated interim summaries
+
+## Default-value policy
+
+When the choice does not affect safety, correctness, or the user's stated goal, prefer common defaults for:
+- naming style
+- file structure
+- testing approach
+- documentation updates
+- implementation details
+
+If a default would materially alter the result, move it into the batch question phase.
+
+## Interaction style
+
+- fewer interruptions, more progress
+- batch all necessary questions
+- plan first, execute continuously
+- interrupt only for high-risk decisions
+- summarize once at the end
+
+## Short version
+
+Default to progress. Auto-handle low-risk work. Batch medium-risk questions before execution. Stop only for high-risk actions. Keep execution continuous and report at the end.
