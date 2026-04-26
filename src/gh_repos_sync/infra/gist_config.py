@@ -3,7 +3,7 @@
 import json
 import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import requests
 
@@ -14,7 +14,12 @@ from .paths import SCRIPT_DIR
 
 class GistConfigManager:
     """Manage configuration files stored in GitHub Gist."""
-    
+
+    # Reserved key inside ``config_cache`` for non-content metadata such as
+    # the currently-active gist id. Pure hex gist ids never collide with
+    # this name, so the same cache file can hold both shapes safely.
+    META_KEY = "_meta"
+
     def __init__(self, cache_dir: Optional[Path] = None):
         self.cache_dir = cache_dir or SCRIPT_DIR / ".gist_cache"
         self.cache_dir.mkdir(exist_ok=True)
@@ -297,6 +302,103 @@ class GistConfigManager:
                     return True, gist_id
         
         return False, "无效的 Gist URL 格式"
+
+    # ------------------------------------------------------------------
+    # Active-gist tracking and end-to-end discover-or-create helper
+    # ------------------------------------------------------------------
+
+    def get_active_gist_id(self, filename: str = "REPO-GROUPS.md") -> Optional[str]:
+        """Return the gist id currently bound to ``filename``, if cached."""
+        meta = self.config_cache.get(self.META_KEY, {})
+        if not isinstance(meta, dict):
+            return None
+        active_map = meta.get("active_gist_ids", {})
+        if not isinstance(active_map, dict):
+            return None
+        value = active_map.get(filename)
+        return value if isinstance(value, str) and value else None
+
+    def set_active_gist_id(self, gist_id: str, filename: str = "REPO-GROUPS.md") -> None:
+        """Persist ``gist_id`` as the active binding for ``filename``."""
+        meta = self.config_cache.setdefault(self.META_KEY, {})
+        if not isinstance(meta, dict):
+            meta = {}
+            self.config_cache[self.META_KEY] = meta
+        active_map = meta.setdefault("active_gist_ids", {})
+        if not isinstance(active_map, dict):
+            active_map = {}
+            meta["active_gist_ids"] = active_map
+        active_map[filename] = gist_id
+        self._save_cache()
+
+    @staticmethod
+    def default_initial_content(owner: str) -> str:
+        """Bootstrap content used when auto-creating a brand new gist."""
+        return (
+            "# GitHub 仓库分组\n"
+            "\n"
+            f"仓库所有者: {owner}\n"
+            "\n"
+            "## 未分类\n"
+        )
+
+    def discover_or_create_repo_groups_gist(
+        self,
+        owner: str,
+        token: Optional[str] = None,
+        filename: str = "REPO-GROUPS.md",
+        initial_content_factory: Optional[Callable[[], str]] = None,
+    ) -> Tuple[bool, str, str, bool, str]:
+        """Find or create a gist that holds ``filename``.
+
+        Resolution order:
+
+        1. Trust the cached active id if the file is still readable.
+        2. Otherwise list the user's gists and find one with that filename.
+        3. Otherwise create a new private gist with bootstrap content.
+
+        Returns ``(ok, gist_id, gist_url, was_created, error)``. The
+        ``error`` field is empty on success.
+        """
+
+        # Step 1: cached active id, if any
+        cached_id = self.get_active_gist_id(filename)
+        if cached_id:
+            ok, _, _ = self._get_gist_content(cached_id, filename, token)
+            if ok:
+                gist_url = f"https://gist.github.com/{owner}/{cached_id}" if owner else f"https://gist.github.com/{cached_id}"
+                return True, cached_id, gist_url, False, ""
+            log_info(f"缓存的 Gist ID 已失效，重新发现: {cached_id}")
+
+        # Step 2: search the user's gists
+        ok, gists, err = self.list_user_gists(token)
+        if not ok:
+            return False, "", "", False, err
+
+        found = self.find_config_gist(gists, filename)
+        if found:
+            gist_id = found.get("id") or ""
+            gist_url = found.get("url") or (f"https://gist.github.com/{owner}/{gist_id}" if owner else f"https://gist.github.com/{gist_id}")
+            if not gist_id:
+                return False, "", "", False, "Gist 列表中找到匹配项但缺少 id"
+            self.set_active_gist_id(gist_id, filename)
+            log_info(f"已发现现有 Gist: {gist_url}")
+            return True, gist_id, gist_url, False, ""
+
+        # Step 3: create a brand new gist
+        content = (initial_content_factory or (lambda: self.default_initial_content(owner)))()
+        ok, gist_id, gist_url_or_err = self.create_gist(
+            content,
+            filename=filename,
+            token=token,
+            description="CloneX Configuration (Auto-created)",
+            public=False,
+        )
+        if not ok:
+            return False, "", "", False, gist_url_or_err
+        self.set_active_gist_id(gist_id, filename)
+        log_success(f"已创建新的 Gist: {gist_url_or_err}")
+        return True, gist_id, gist_url_or_err, True, ""
 
 
 # 全局实例
