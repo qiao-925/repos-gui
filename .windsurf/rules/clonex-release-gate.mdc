@@ -14,6 +14,19 @@ description: CloneX 发布门禁规则：在涉及版本号、GitHub Release、P
 - 讨论是否发布 `0.x`、`1.0.0rcN`、`1.0.0`。
 - 修改 CLI / GUI / MCP 中会影响用户安装后行为的入口或契约。
 
+## 规范来源与规则映射
+
+本规则不是单纯的项目偏好，而是把通用发布规范映射到 CloneX 当前阶段后形成的发布知识库。
+
+| 来源 | 关键原则 | 映射到 CloneX 的规则 |
+|---|---|---|
+| [PEP 440](https://peps.python.org/pep-0440/) | Python 包版本必须符合可排序、可解析的公共版本格式；final release 应持续递增；支持 `a` / `b` / `rc` / `.dev` / `.post`。 | CloneX 版本号必须使用 PEP 440 兼容格式；不得复用已发布版本；`1.0.0rcN` 用于正式 1.0 前候选验证；真正 bugfix 用新 patch 版本，不用 `.postN` 伪装代码修复。 |
+| [Python Packaging User Guide - Versioning](https://packaging.python.org/en/latest/discussions/versioning/) | Python 项目可采用 SemVer / CalVer 等方案；多数项目使用近似 SemVer；pre-release 默认不会被 pip 安装。 | CloneX 采用近似 SemVer 的 `major.minor.patch`；当前以 `0.x` 表达公共契约尚未稳定；若未来使用 `rc`，必须说明用户需显式安装预发布版本。 |
+| [Semantic Versioning 2.0.0](https://semver.org/) | `0.y.z` 表示初始开发阶段，公共 API 不稳定；`1.0.0` 定义稳定公共 API；patch/minor/major 分别表达 bugfix/兼容新增/不兼容变更。 | CloneX 当前停留在 `0.1.x` 起步；`0.2.x` 用于新增能力；`1.0.0` 必须等 CLI、Gist 格式、PyPI entry points、MCP tools 等公共契约稳定后再发布。 |
+| [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) | GitHub Release 基于 Git tag，是可供用户下载和引用的特定源码快照。 | CloneX 创建 release/tag 前必须先通过发布门禁；当前 tag 不自动触发 PyPI，避免把源码标记动作和包发布动作强耦合。 |
+
+当这些来源与本项目策略存在张力时，处理顺序为：**安全发布与用户确认 > PyPI 不可复用约束 > Python/PEP 440 兼容性 > SemVer 语义 > CloneX 当前 CLI 优先策略**。
+
 ## 核心定位
 
 CloneX 当前发布策略以 **CLI 可用性优先**：
@@ -33,7 +46,7 @@ CloneX 当前发布策略以 **CLI 可用性优先**：
 | `1.0.0rcN` | 稳定候选 | 功能冻结，只修 bug | 用于 1.0 前真实验证 |
 | `1.0.0` | 稳定承诺 | 公共接口清晰且愿意维护兼容性 | 正式稳定版 |
 
-不得因为“功能已经能跑”就直接发布 `1.0.0`。`1.0.0` 的判断标准是公共使用契约稳定，而不是功能数量。
+依据 SemVer，`0.y.z` 是初始开发阶段，公共 API 不应视为稳定；`1.0.0` 才定义稳定公共 API。因此不得因为“功能已经能跑”就直接发布 `1.0.0`。`1.0.0` 的判断标准是公共使用契约稳定，而不是功能数量。
 
 ## 公共契约
 
@@ -51,7 +64,7 @@ CloneX 当前发布策略以 **CLI 可用性优先**：
 
 发布到正式 PyPI 前，Agent 必须先完成并汇报以下检查：
 
-1. 版本号符合当前阶段，不复用已发布版本。
+1. 版本号符合当前阶段与 PEP 440，不复用已发布版本。
 2. README 包含安装、CLI 快速开始、验证和发布说明。
 3. `uv run --group test pytest -q` 通过。
 4. `uv build` 成功生成 sdist 和 wheel。
@@ -62,7 +75,7 @@ CloneX 当前发布策略以 **CLI 可用性优先**：
 
 ## GitHub Release 与 tag 规则
 
-- GitHub Release 基于 Git tag，代表一个可供用户下载和引用的源码快照。
+- 依据 GitHub Releases 文档，GitHub Release 基于 Git tag，代表一个可供用户下载和引用的源码快照。
 - 在当前策略下，tag 不自动触发 PyPI 发布。
 - 创建 `v*` tag 前，必须确认对应版本已经通过 PyPI 发布门禁。
 - 删除或重建 tag 属于高风险操作，必须先说明影响并获得用户明确确认。
@@ -91,6 +104,8 @@ CloneX 当前发布策略以 **CLI 可用性优先**：
 | MCP tool 删除/改名 | minor，并说明破坏性 | major |
 | GUI 可视化增强 | minor | minor |
 | 安全修复 | patch，并说明风险 | patch，必要时允许兼容性例外 |
+
+此表采用近似 SemVer：patch 表示 bugfix，minor 表示兼容新增，major 表示不兼容公共契约变化。由于 CloneX 仍处于 `0.x`，允许更快迭代，但必须在 README 或 release notes 中说明破坏性影响。
 
 ## Agent 行为要求
 
