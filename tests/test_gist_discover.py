@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
-from gh_repos_sync.infra.gist_config import GistConfigManager
+from clonex.infra.gist_config import GistConfigManager
 
 
 # ---------------------------------------------------------------------------

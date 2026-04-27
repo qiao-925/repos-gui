@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gh_repos_sync.cli import _normalize_output_path_arg
+from clonex.cli import _normalize_output_path_arg
 
 
 def test_normalize_output_path_arg_trims_trailing_dot():

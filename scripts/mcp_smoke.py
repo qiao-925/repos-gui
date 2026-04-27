@@ -45,8 +45,8 @@ async def _call(client, tool_name: str, arguments: Mapping[str, Any] | None = No
 async def run() -> int:
     # Importing the server module registers all 16 tools on the shared
     # FastMCP instance.
-    from gh_repos_sync.mcp import server as _server  # noqa: F401
-    from gh_repos_sync.mcp.app import mcp
+    from clonex.mcp import server as _server  # noqa: F401
+    from clonex.mcp.app import mcp
     from mcp.shared.memory import create_connected_server_and_client_session
 
     async with create_connected_server_and_client_session(mcp) as client:

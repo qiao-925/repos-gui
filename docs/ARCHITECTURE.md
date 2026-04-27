@@ -15,7 +15,7 @@ graph TB
     subgraph Entries["🚪 两个独立进程入口"]
         direction LR
         GUI["<b>gui.py</b><br/>PyQt6 桌面"]
-        MCP["<b>python -m gh_repos_sync.mcp</b><br/>FastMCP / stdio"]
+        MCP["<b>python -m clonex.mcp</b><br/>FastMCP / stdio"]
     end
 
     subgraph UIMCP["🖼 ui/ &nbsp;&nbsp;&nbsp; 🤖 mcp/ · 14 工具分 5 组"]
@@ -112,7 +112,7 @@ timeline
 
 | 维度 | 现状 |
 |---|---|
-| **入口** | GUI: `gui.py` → `ui.main_window.main` / MCP: `python -m gh_repos_sync.mcp` → `mcp.server.main` |
+| **入口** | GUI: `gui.py` → `ui.main_window.main` / MCP: `python -m clonex.mcp` → `mcp.server.main` |
 | **分层顺序** | `ui \| mcp → application → core \| domain → infra` |
 | **MCP 工具数** | 14 个（A 查询 4 + B 写入 1 + C 单仓 3 + C2 批量 3 + D 流程 3） |
 | **共享契约文件** | `REPO-GROUPS.md`（分组配置） · `failed-repos.txt`（失败清单） · OS keyring（token） |

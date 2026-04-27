@@ -130,7 +130,7 @@ async def test_write_groups_without_owner_and_no_existing_file_errors(
 ):
     config = tmp_path / "does-not-exist.md"
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.groups.get_cached_owner", lambda: ""
+        "clonex.mcp.tools.groups.get_cached_owner", lambda: ""
     )
     payload = await call(
         mcp_client,
@@ -154,7 +154,7 @@ async def test_write_groups_refuses_when_existing_file_unparseable(
         raise RuntimeError("simulated parse failure")
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.groups.parse_repo_tasks", _raise
+        "clonex.mcp.tools.groups.parse_repo_tasks", _raise
     )
 
     payload = await call(

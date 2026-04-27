@@ -1,9 +1,3 @@
----
-description: "CloneX release gate rule with PEP 440, SemVer, and PyPI publishing constraints"
-globs: "**/*"
-alwaysApply: true
----
-
 # CloneX Release Gate Rule
 
 ## Public Contract
@@ -17,41 +11,6 @@ alwaysApply: true
 - GUI 启动入口和安装方式
 
 在 `0.x` 阶段可以调整公共契约，但必须在 README 或 release notes 中明确说明破坏性影响。进入 `1.0.0` 后，破坏这些契约应进入 major release 评估。
-
-## 核心定位
-
-CloneX 的主线是“核心能力共享，入口职责分离”：
-
-- **CLI** 面向自动化和快速上手，保持单入口、低心智负担。
-- **GUI** 面向人工操作和可视化维护，适合查看、编辑和引导使用。
-- **MCP** 面向 Agent 和脚本化调用，提供结构化工具接口。
-- 三者共享同一套领域约束、同一份仓库分组事实来源和同一批底层能力，不应各自实现一套平行逻辑。
-
-## 版本阶段规则
-
-| 阶段 | 含义 | 约束侧重点 |
-|---|---|---|
-| `0.x` | 预发布、快速迭代阶段 | 允许更快调整 CLI / GUI / MCP 细节，但必须明确说明破坏性影响 |
-| `0.1.x` | 当前可用主线 | 优先保持 CLI 主路径简单可用，避免把复杂度堆进入口层 |
-| `1.0.0` | 稳定公共契约的目标阶段 | CLI / GUI / MCP 的公共契约应视为稳定，破坏性变更进入 major 评估 |
-
-## 公共契约
-
-发布评估时，以下都属于 CloneX 的公共契约：
-
-- CLI 命令、参数、默认值和输出路径含义
-- `REPO-GROUPS.md` Gist 格式和自动维护行规范
-- PyPI 包名、extras、entry points
-- MCP tools 名称、参数、响应结构
-- GUI 启动入口和安装方式
-
-在 `0.x` 阶段可以调整公共契约，但必须在 README 或 release notes 中明确说明破坏性影响。进入 `1.0.0` 后，破坏这些契约应进入 major release 评估。
-
-## Shared Contract
-
-- `REPO-GROUPS.md` 仍然是分组事实来源，变更应保持可读性和可迁移性。
-- `failed-repos.txt` 仍然是失败清单共享文件，GUI 与 MCP 必须继续共用。
-- `README.md`、`docs/MCP-GUIDE.md`、`docs/BUILD.md` 与本规则应互相一致。
 
 ## PyPI 发布门禁
 

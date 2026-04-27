@@ -76,13 +76,13 @@ async def test_clone_group_executes_when_dry_run_false(
         return 2, 0, []
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.get_github_token", lambda: None
+        "clonex.mcp.tools.flows.get_github_token", lambda: None
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.execute_parallel_clone", fake_execute
+        "clonex.mcp.tools.flows.execute_parallel_clone", fake_execute
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.save_failed_repos",
+        "clonex.mcp.tools.flows.save_failed_repos",
         lambda failed, path, owner: None,  # should not be called (no failures)
     )
 
@@ -126,14 +126,14 @@ async def test_update_all_executes_when_dry_run_false(
     config.write_text(SAMPLE_REPO_GROUPS, encoding="utf-8")
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.get_github_token", lambda: None
+        "clonex.mcp.tools.flows.get_github_token", lambda: None
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.execute_parallel_pull",
+        "clonex.mcp.tools.flows.execute_parallel_pull",
         lambda tasks, parallel, token, cb: (3, 0, []),
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.save_failed_repos",
+        "clonex.mcp.tools.flows.save_failed_repos",
         lambda failed, path, owner: None,
     )
 
@@ -154,7 +154,7 @@ async def test_retry_failed_with_no_failed_file_returns_empty(
     mcp_client, tmp_path: Path, monkeypatch
 ):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.failed_repos_path",
+        "clonex.mcp.tools.flows.failed_repos_path",
         lambda: tmp_path / "never-there.txt",
     )
     payload = await call(mcp_client, "retry_failed", {})
@@ -167,7 +167,7 @@ async def test_retry_failed_dry_run_lists_tasks(mcp_client, tmp_path: Path, monk
     failed_file.write_text(SAMPLE_REPO_GROUPS, encoding="utf-8")
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.failed_repos_path", lambda: failed_file
+        "clonex.mcp.tools.flows.failed_repos_path", lambda: failed_file
     )
 
     payload = await call(mcp_client, "retry_failed", {})
@@ -189,13 +189,13 @@ async def test_retry_failed_executes_and_rewrites_list(
         saved["path"] = path
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.failed_repos_path", lambda: failed_file
+        "clonex.mcp.tools.flows.failed_repos_path", lambda: failed_file
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.get_github_token", lambda: None
+        "clonex.mcp.tools.flows.get_github_token", lambda: None
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.execute_parallel_clone",
+        "clonex.mcp.tools.flows.execute_parallel_clone",
         lambda tasks, parallel_t, parallel_c, token, cb: (
             2,
             1,
@@ -203,7 +203,7 @@ async def test_retry_failed_executes_and_rewrites_list(
         ),
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.flows.save_failed_repos", fake_save
+        "clonex.mcp.tools.flows.save_failed_repos", fake_save
     )
 
     payload = await call(

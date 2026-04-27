@@ -59,10 +59,10 @@ async def test_clone_repos_batch_executes_when_dry_run_false(mcp_client, monkeyp
         return 2, 1, [{"repo_full": "alice/broken", "repo_name": "broken"}]
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.batch.get_github_token", lambda: "ghp_xxx"
+        "clonex.mcp.tools.batch.get_github_token", lambda: "ghp_xxx"
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.batch.execute_parallel_clone", fake_execute
+        "clonex.mcp.tools.batch.execute_parallel_clone", fake_execute
     )
 
     payload = await call(
@@ -100,10 +100,10 @@ async def test_pull_repos_batch_dry_run_preview(mcp_client):
 
 async def test_pull_repos_batch_executes_when_dry_run_false(mcp_client, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.batch.get_github_token", lambda: None
+        "clonex.mcp.tools.batch.get_github_token", lambda: None
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.batch.execute_parallel_pull",
+        "clonex.mcp.tools.batch.execute_parallel_pull",
         lambda *args, **kwargs: (1, 0, []),
     )
 
@@ -143,7 +143,7 @@ async def test_check_repos_batch_reports_success_and_failures(
         return 1, 1, [{"repo_full": "alice/bad", "repo_name": "bad"}]
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.batch.check_repos_parallel", fake_check
+        "clonex.mcp.tools.batch.check_repos_parallel", fake_check
     )
 
     payload = await call(

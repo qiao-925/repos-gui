@@ -51,6 +51,8 @@
 2. 输入 GitHub Token（必需）
 3. 点击 "上传到 Gist"
 
+> 如果你更偏向自动化，可以通过 MCP 的 `write_groups` 工具维护分组；GUI 负责交互式查看和编辑，MCP 负责 Agent/脚本化写回。
+
 ### 4. 配置文件格式
 
 Gist 中的配置文件格式与本地 `REPO-GROUPS.md` 完全相同：
@@ -140,24 +142,18 @@ Gist 中的配置文件格式与本地 `REPO-GROUPS.md` 完全相同：
 - 开发环境：`dev-config-gist`
 - 生产环境：`prod-config-gist`
 
-### 2. 自动化脚本
-可以通过命令行工具自动化配置管理：
+### 2. 自动化方式
+Gist 配置的自动化维护有两条路径：
 
-```bash
-# 从 Gist 同步配置
-python -m gh_repos_sync.cli sync-gist --gist-id YOUR_GIST_ID
+- **GUI**：打开“Gist 配置管理”对话框，适合人工查看、编辑和同步。
+- **MCP**：通过 `write_groups` 工具把分组映射写回 `REPO-GROUPS.md`，适合 Agent 或脚本化操作。
 
-# 上传配置到 Gist
-python -m gh_repos_sync.cli upload-gist --gist-id YOUR_GIST_ID --token YOUR_TOKEN
-```
-
-### 3. 配置模板
-使用 `REPO-GROUPS.md.example` 作为新用户的配置模板。
+如果你想快速了解配置格式，请直接参考 `README.md` 的 Gist 格式示例。
 
 ## 相关文件
 
 - `REPO-GROUPS.md`：本地配置文件
-- `REPO-GROUPS.md.example`：配置模板
+- `README.md`：Gist 分组格式示例
 - `.gist_cache/`：缓存目录
 - `logs/CloneX.log`：日志文件
 

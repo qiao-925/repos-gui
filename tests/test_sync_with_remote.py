@@ -16,9 +16,9 @@ from typing import Any, Dict, List, Tuple
 
 import pytest
 
-from gh_repos_sync.application import sync_with_remote
-from gh_repos_sync.application.sync_with_remote import sync_repos_to_gist_uncategorized
-from gh_repos_sync.infra.gist_config import gist_manager
+from clonex.application import sync_with_remote
+from clonex.application.sync_with_remote import sync_repos_to_gist_uncategorized
+from clonex.infra.gist_config import gist_manager
 
 
 # ---------------------------------------------------------------------------

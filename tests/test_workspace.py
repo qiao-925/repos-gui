@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from gh_repos_sync.core.workspace import (
+from clonex.core.workspace import (
     build_workspace_payload,
     sanitize_workspace_filename,
     write_workspace_file,

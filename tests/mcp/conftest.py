@@ -25,12 +25,12 @@ def anyio_backend() -> str:
 async def mcp_client():
     """Return a live MCP `ClientSession` already connected to the CloneX server.
 
-    Importing `gh_repos_sync.mcp.server` triggers registration of all 16 tools
+    Importing `clonex.mcp.server` triggers registration of all 16 tools
     on the shared FastMCP instance as a side effect.
     """
     # Side-effect import: register tools.
-    from gh_repos_sync.mcp import server as _server  # noqa: F401
-    from gh_repos_sync.mcp.app import mcp
+    from clonex.mcp import server as _server  # noqa: F401
+    from clonex.mcp.app import mcp
 
     async with create_connected_server_and_client_session(mcp) as session:
         yield session

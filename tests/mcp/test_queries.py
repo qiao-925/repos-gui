@@ -29,13 +29,13 @@ async def test_list_repos_success_with_cached_login(mcp_client, monkeypatch):
         return True, fake_repos, ""
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.get_cached_owner", lambda: "cached-user"
+        "clonex.mcp.tools.queries.get_cached_owner", lambda: "cached-user"
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.get_github_token", lambda: "ghp_xxx"
+        "clonex.mcp.tools.queries.get_github_token", lambda: "ghp_xxx"
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.fetch_owner_repos", fake_fetch
+        "clonex.mcp.tools.queries.fetch_owner_repos", fake_fetch
     )
 
     payload = await call(mcp_client, "list_repos")
@@ -53,10 +53,10 @@ async def test_list_repos_include_private_true_forwards_token(mcp_client, monkey
         return True, [], ""
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.get_github_token", lambda: "ghp_real"
+        "clonex.mcp.tools.queries.get_github_token", lambda: "ghp_real"
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.fetch_owner_repos", fake_fetch
+        "clonex.mcp.tools.queries.fetch_owner_repos", fake_fetch
     )
 
     await call(
@@ -69,7 +69,7 @@ async def test_list_repos_include_private_true_forwards_token(mcp_client, monkey
 
 async def test_list_repos_no_owner_returns_config_missing(mcp_client, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.get_cached_owner", lambda: ""
+        "clonex.mcp.tools.queries.get_cached_owner", lambda: ""
     )
     payload = await call(mcp_client, "list_repos")
     assert_err(payload, "E_CONFIG_MISSING", tool="list_repos")
@@ -79,7 +79,7 @@ async def test_list_repos_include_private_without_token_returns_auth_missing(
     mcp_client, monkeypatch
 ):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.get_github_token", lambda: None
+        "clonex.mcp.tools.queries.get_github_token", lambda: None
     )
     payload = await call(
         mcp_client,
@@ -91,7 +91,7 @@ async def test_list_repos_include_private_without_token_returns_auth_missing(
 
 async def test_list_repos_propagates_github_api_error(mcp_client, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.fetch_owner_repos",
+        "clonex.mcp.tools.queries.fetch_owner_repos",
         lambda owner, token=None, timeout=10: (False, [], "rate limit exceeded"),
     )
     payload = await call(mcp_client, "list_repos", {"owner": "alice"})
@@ -145,7 +145,7 @@ async def test_read_groups_rejects_file_without_owner(mcp_client, tmp_path: Path
 
 async def test_list_failed_returns_empty_when_file_missing(mcp_client, tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.failed_repos_path",
+        "clonex.mcp.tools.queries.failed_repos_path",
         lambda: tmp_path / "never-there.txt",
     )
     payload = await call(mcp_client, "list_failed")
@@ -159,7 +159,7 @@ async def test_list_failed_reads_existing_file(mcp_client, tmp_path, monkeypatch
     failed_file.write_text(REPO_GROUPS_SAMPLE, encoding="utf-8")
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.failed_repos_path",
+        "clonex.mcp.tools.queries.failed_repos_path",
         lambda: failed_file,
     )
     payload = await call(mcp_client, "list_failed")
@@ -173,14 +173,14 @@ async def test_list_failed_reads_existing_file(mcp_client, tmp_path, monkeypatch
 
 async def test_get_auth_status_fully_authenticated(mcp_client, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.load_token",
+        "clonex.mcp.tools.queries.auth.load_token",
         lambda: ("ghp_xxx", "keyring"),
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.load_cached_login", lambda: "alice"
+        "clonex.mcp.tools.queries.auth.load_cached_login", lambda: "alice"
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.fetch_user_profile",
+        "clonex.mcp.tools.queries.auth.fetch_user_profile",
         lambda token: ("alice", [], ""),
     )
 
@@ -195,10 +195,10 @@ async def test_get_auth_status_fully_authenticated(mcp_client, monkeypatch):
 
 async def test_get_auth_status_without_token_is_logged_out(mcp_client, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.load_token", lambda: (None, "none")
+        "clonex.mcp.tools.queries.auth.load_token", lambda: (None, "none")
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.load_cached_login", lambda: ""
+        "clonex.mcp.tools.queries.auth.load_cached_login", lambda: ""
     )
 
     payload = await call(mcp_client, "get_auth_status")
@@ -209,15 +209,15 @@ async def test_get_auth_status_without_token_is_logged_out(mcp_client, monkeypat
 
 async def test_get_auth_status_invalid_token_is_unverified(mcp_client, monkeypatch):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.load_token",
+        "clonex.mcp.tools.queries.auth.load_token",
         lambda: ("ghp_stale", "keyring"),
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.load_cached_login", lambda: "cached"
+        "clonex.mcp.tools.queries.auth.load_cached_login", lambda: "cached"
     )
     # fetch_user_profile returns no login ⇒ token didn't verify.
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.queries.auth.fetch_user_profile",
+        "clonex.mcp.tools.queries.auth.fetch_user_profile",
         lambda token: ("", [], "401 unauthorized"),
     )
 

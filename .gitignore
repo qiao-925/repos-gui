@@ -23,7 +23,16 @@ dist/
 # 忽略 Claude Code 配置
 .claude/
 .codex/
-.cursor
+
+# AI 工具配置（可选：通过 scripts/sync-agent-rules.py 从 docs/agent-rules/ 生成）
+# 注意：AGENTS.md 是通用入口，工具特定配置不是必需的
+.cursor/
+
+# Handoff 历史归档（运行产物，按轮次存档但不跟踪）
+handoff/history/
+
+# Agent rules sync config（由 Cursor 自动生成，脚本不依赖）
+.agent-rules-config.json
 
 # 忽略 uv 虚拟环境
 .venv/

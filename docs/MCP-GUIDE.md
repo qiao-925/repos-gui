@@ -18,7 +18,7 @@
   "mcpServers": {
     "clonex": {
       "command": "uv",
-      "args": ["run", "--extra", "mcp", "python", "-m", "gh_repos_sync.mcp"],
+      "args": ["run", "--extra", "mcp", "python", "-m", "clonex.mcp"],
       "cwd": "<path-to-CloneX-repo>"
     }
   }
@@ -136,7 +136,7 @@ uv run --group test python scripts/mcp_smoke.py
 任何一个 MCP 客户端上线前最后一关。它提供交互式界面，能看完整的 JSON-RPC 往返：
 
 ```bash
-npx @modelcontextprotocol/inspector uv run --extra mcp python -m gh_repos_sync.mcp
+npx @modelcontextprotocol/inspector uv run --extra mcp python -m clonex.mcp
 ```
 
 或（PyPI 发布后）：

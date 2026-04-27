@@ -32,9 +32,9 @@ dependencies = [
 Homepage = "https://github.com/qiao-925/CloneX"
 
 [project.scripts]
-clonex = "gh_repos_sync.cli:main"
-clonex-gui = "gh_repos_sync.ui.main_window:main"
-clonex-mcp = "gh_repos_sync.mcp.server:main"
+clonex = "clonex.cli:main"
+clonex-gui = "clonex.ui.main_window:main"
+clonex-mcp = "clonex.mcp.server:main"
 
 [project.optional-dependencies]
 cli = []
@@ -72,7 +72,7 @@ default-groups = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Keep tmp_path inside the workspace — %LOCALAPPDATA%\Temp is blocked by
+# Keep tmp_path inside the workspace ? %LOCALAPPDATA%\Temp is blocked by
 # Controlled Folder Access on this machine and pytest can't scandir it.
 addopts = "-ra --strict-markers --basetemp=.pytest-tmp"
 markers = [

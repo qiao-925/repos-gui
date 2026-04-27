@@ -1,42 +1,33 @@
-# 构建和发布指南
+# 构建 GUI 可执行文件
 
-## 自动构建
+本页只讲 GUI 打包，不描述 PyPI 发布流程。PyPI 发布是独立流程，见 `README.md` 的“发布到 PyPI”章节。
 
-项目已配置 GitHub Actions 自动构建，支持跨平台发布：
+## GitHub Actions 构建
 
-### 触发方式
-1. **标签推送**：推送 `v*` 标签（如 `v1.0.0`）会自动构建并创建 Release
-2. **手动触发**：在 GitHub Actions 页面手动运行 "Build and Release" 工作流
+仓库中有一个 GUI 构建 workflow，用于生成桌面可执行文件并上传 GitHub Release 附件：
 
-### 支持平台
-- Windows (`.exe`)
-- macOS (可执行文件)
-- Linux (可执行文件)
-
-### 构建产物
-构建完成后，可执行文件会自动上传到 GitHub Release，用户可直接下载使用，无需克隆仓库或安装依赖。
+- `.github/workflows/build.yml`
+- 支持 `v*` tag 触发，也支持手动 `workflow_dispatch`
+- 产物是 `CloneX.exe` 或对应平台的可执行文件
+- release 步骤只负责把构建产物挂到 GitHub Release，并不负责 PyPI 发布
 
 ## 本地构建
 
 如需本地构建，请确保已安装 uv：
 
 ```bash
-# 安装依赖
 uv sync --group build
-
-# 构建
 uv run pyinstaller --noconfirm --clean --onefile --windowed --name CloneX --paths src gui.py
-
-# 运行
-./dist/CloneX  # Linux/macOS
-./dist/CloneX.exe  # Windows
 ```
 
-## 发布新版本
+构建产物默认位于 `dist/`：
 
-1. 更新版本号（如有需要）
-2. 提交代码：`git commit -m "Release v1.0.0"`
-3. 创建标签：`git tag v1.0.0`
-4. 推送标签：`git push origin v1.0.0`
+- Windows：`dist/CloneX.exe`
+- Linux / macOS：`dist/CloneX`
 
-GitHub Actions 会自动构建并创建 Release。
+## 与 PyPI 发布的区别
+
+- **GUI 构建**：用于生成桌面可执行文件，走 `build.yml`
+- **PyPI 发布**：用于发布 Python 包，走 `.github/workflows/pypi-publish.yml`
+- `pypi-publish.yml` 仅支持手动 `workflow_dispatch`
+- 当前仓库版本仍处于 `0.x` 阶段，不应把 GUI 构建误写成自动发 PyPI 的流程

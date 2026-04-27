@@ -1,9 +1,3 @@
----
-description: "Agent execution rule for risk-based confirmation, batch questions, and default-first planning"
-globs: "**/*"
-alwaysApply: true
----
-
 # Agent Workflow Rule
 
 ## Goal

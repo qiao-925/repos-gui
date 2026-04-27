@@ -3,7 +3,7 @@
   "mcpServers": {
     "clonex": {
       "command": "uv",
-      "args": ["run", "--extra", "mcp", "python", "-m", "gh_repos_sync.mcp"],
+      "args": ["run", "--extra", "mcp", "python", "-m", "clonex.mcp"],
       "cwd": "<path-to-CloneX-repo>"
     }
   }

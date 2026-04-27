@@ -1,4 +1,4 @@
-from gh_repos_sync.core.clone import _extract_git_error_detail
+from clonex.core.clone import _extract_git_error_detail
 
 
 def test_extract_git_error_detail_prefers_error_lines():

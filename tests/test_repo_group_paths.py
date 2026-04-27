@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gh_repos_sync.domain.repo_groups import (
+from clonex.domain.repo_groups import (
     get_group_folder,
     parse_repo_tasks,
     sanitize_path_segment,

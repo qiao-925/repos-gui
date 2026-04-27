@@ -31,7 +31,7 @@ async def test_clone_repo_dry_run_by_default_does_not_execute(
         return True
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.clone_mod.clone_repo", fake_clone
+        "clonex.mcp.tools.execution.clone_mod.clone_repo", fake_clone
     )
 
     payload = await call(
@@ -65,10 +65,10 @@ async def test_clone_repo_actually_calls_core_when_dry_run_false(
         return True
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.get_github_token", lambda: "ghp_xxx"
+        "clonex.mcp.tools.execution.get_github_token", lambda: "ghp_xxx"
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.clone_mod.clone_repo", fake_clone
+        "clonex.mcp.tools.execution.clone_mod.clone_repo", fake_clone
     )
 
     payload = await call(
@@ -97,7 +97,7 @@ async def test_clone_repo_returns_git_exec_error_on_failure(
     mcp_client, tmp_path: Path, monkeypatch
 ):
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.clone_mod.clone_repo",
+        "clonex.mcp.tools.execution.clone_mod.clone_repo",
         lambda *args, **kwargs: False,
     )
     payload = await call(
@@ -142,10 +142,10 @@ async def test_pull_repo_success_path(mcp_client, tmp_path: Path, monkeypatch):
     repo = _make_fake_git_repo(tmp_path, "demo")
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.get_github_token", lambda: None
+        "clonex.mcp.tools.execution.get_github_token", lambda: None
     )
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.pull_mod.pull_repo",
+        "clonex.mcp.tools.execution.pull_mod.pull_repo",
         lambda *args, **kwargs: (True, ""),
     )
 
@@ -160,7 +160,7 @@ async def test_pull_repo_failure_path(mcp_client, tmp_path: Path, monkeypatch):
     repo = _make_fake_git_repo(tmp_path, "demo")
 
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.pull_mod.pull_repo",
+        "clonex.mcp.tools.execution.pull_mod.pull_repo",
         lambda *args, **kwargs: (False, "non-fast-forward"),
     )
 
@@ -190,7 +190,7 @@ async def test_check_repo_non_existent_path_returns_invalid_arg(
 async def test_check_repo_valid_result(mcp_client, tmp_path: Path, monkeypatch):
     repo = _make_fake_git_repo(tmp_path, "demo")
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.check_mod.check_repo",
+        "clonex.mcp.tools.execution.check_mod.check_repo",
         lambda path, label, timeout: (True, ""),
     )
     payload = await call(mcp_client, "check_repo", {"repo_path": str(repo)})
@@ -204,7 +204,7 @@ async def test_check_repo_invalid_result_surfaces_error(
 ):
     repo = _make_fake_git_repo(tmp_path, "demo")
     monkeypatch.setattr(
-        "gh_repos_sync.mcp.tools.execution.check_mod.check_repo",
+        "clonex.mcp.tools.execution.check_mod.check_repo",
         lambda path, label, timeout: (False, "dangling object abc123"),
     )
     payload = await call(
