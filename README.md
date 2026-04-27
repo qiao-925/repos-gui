@@ -1,4 +1,4 @@
-﻿# CloneX
+# CloneX
 
 > GitHub 多仓库批量维护工具 —— **CLI + GUI + MCP Server**
 
@@ -154,7 +154,7 @@ npx @modelcontextprotocol/inspector uv run --extra mcp python -m gh_repos_sync.m
 
 ## 发布到 PyPI
 
-当前包名：`clonex`。
+当前包名：`clonex`。当前版本仍处于 `0.x` 阶段，表示功能可用但 API 与发布节奏尚未承诺稳定。
 
 发布前本地检查：
 
@@ -165,23 +165,19 @@ uv build
 
 推荐流程：
 
-1. 更新 `pyproject.toml` 的版本号，例如 `1.0.3`。
-2. 提交并推送版本修改。
-3. 在 GitHub Actions 手动运行 `Publish Package`，选择 `testpypi`。
-4. 用隔离环境安装 TestPyPI 包验证：
+1. 先完成测试、构建、README 核对和真实低并发 smoke。
+2. 更新 `pyproject.toml` 的版本号，例如 `0.1.0`。
+3. 提交并推送版本修改。
+4. 确认 GitHub Actions secret `PYPI_API_TOKEN` 已配置为正式 PyPI token。
+5. 手动运行 GitHub Actions 的 `Publish Package` workflow。
+6. 发布后用隔离环境验证：
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple clonex==1.0.3
+pip install clonex==0.1.0
 clonex --help
 ```
 
-5. 确认无误后，在 GitHub Actions 手动运行 `Publish Package`，选择 `pypi`。
-6. 或者创建并推送正式 tag，例如 `v1.0.3`，由 tag workflow 发布到 PyPI。
-
-发布凭据建议：
-
-- `TEST_PYPI_API_TOKEN`：仅用于 TestPyPI。
-- `PYPI_API_TOKEN`：仅用于正式 PyPI。
+当前不使用 TestPyPI，也不通过 tag 或 GitHub Release 自动触发发布，避免草率发布。
 
 ## 项目结构
 

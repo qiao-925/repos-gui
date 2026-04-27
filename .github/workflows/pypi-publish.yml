@@ -2,20 +2,6 @@ name: Publish Package
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Package index to publish to"
-        required: true
-        default: "testpypi"
-        type: choice
-        options:
-          - testpypi
-          - pypi
-  release:
-    types: [published]
-  push:
-    tags:
-      - 'v*'
 
 jobs:
   publish:
@@ -38,24 +24,7 @@ jobs:
       - name: Build distribution
         run: uv build
 
-      - name: Rename package artifacts for release tags
-        if: github.event_name == 'push'
-        run: |
-          mkdir -p release-assets
-          cp dist/* release-assets/
-
-      - name: Publish to TestPyPI
-        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          username: __token__
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-          packages-dir: dist/
-          skip-existing: true
-
       - name: Publish to PyPI
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'pypi') || github.event_name == 'release'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           username: __token__
